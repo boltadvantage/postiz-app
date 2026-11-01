@@ -81,6 +81,28 @@ export const useMenuItem = () => {
       ),
       path: '/analytics',
     },
+    // Bolt Advantage: inbox
+    {
+      name: t('inbox', 'Inbox'),
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          fill="none"
+        >
+          <path
+            d="M2.5 11.5h4l1.5 2.5h4l1.5-2.5h4M4.2 4.3 2.5 11.5V16a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-4.5l-1.7-7.2A1.5 1.5 0 0 0 14.3 3H5.7a1.5 1.5 0 0 0-1.5 1.3Z"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ),
+      path: '/inbox',
+    },
     // Bolt Advantage: posting queue
     {
       name: t('queue', 'Queue'),

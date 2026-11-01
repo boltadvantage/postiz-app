@@ -6,6 +6,7 @@ import { TwoFactorController } from '@gitroom/backend/api/routes/two-factor.cont
 import { ChannelVisibilityController } from '@gitroom/backend/api/routes/channel-visibility.controller';
 import { BoltAnalyticsController } from '@gitroom/backend/api/routes/bolt-analytics.controller';
 import { QueueController } from '@gitroom/backend/api/routes/queue.controller';
+import { InboxController } from '@gitroom/backend/api/routes/inbox.controller';
 import { AuthMiddleware } from '@gitroom/backend/services/auth/auth.middleware';
 import { StripeService } from '@gitroom/nestjs-libraries/services/stripe.service';
 import { PaymentController } from '@gitroom/backend/api/routes/payment.controller';
@@ -67,6 +68,7 @@ const authenticatedController = [
   ChannelVisibilityController,
   BoltAnalyticsController,
   QueueController,
+  InboxController,
   AnalyticsController,
   IntegrationsController,
   SettingsController,

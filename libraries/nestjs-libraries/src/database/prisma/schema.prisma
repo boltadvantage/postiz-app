@@ -232,6 +232,63 @@ model ChannelQueue {
   @@index([organizationId])
 }
 
+/// Bolt Advantage: inbox. One row per mention/reply/quote received on a channel.
+model InboxItem {
+  id               String    @id @default(cuid())
+  organizationId   String
+  integrationId    String
+  platform         String
+  externalId       String
+  kind             String
+  authorId         String
+  content          String
+  url              String?
+  /// the post of ours it replies to or quotes, when known
+  inReplyToId      String?
+  inReplyToText    String?
+  /// Nostr: the original signed event (reposts must embed it)
+  raw              String?
+  publishedAt      DateTime
+  readAt           DateTime?
+  archivedAt       DateTime?
+  repliedAt        DateTime?
+  repostedAt       DateTime?
+  quotedAt         DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@unique([integrationId, externalId])
+  @@index([organizationId, publishedAt])
+  @@index([organizationId, authorId])
+}
+
+/// Bolt Advantage: someone who shows up in the inbox. Tags, mute and notes are
+/// private to this organization and never touch the platform.
+model InboxPerson {
+  id             String   @id @default(cuid())
+  organizationId String
+  platform       String
+  authorId       String
+  handle         String?
+  name           String?
+  avatar         String?
+  tags           String   @default("[]")
+  muted          Boolean  @default(false)
+  note           String?
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, platform, authorId])
+  @@index([organizationId, muted])
+}
+
+/// Bolt Advantage: where each channel's inbox fetch left off.
+model InboxCursor {
+  integrationId String    @id
+  cursor        String?
+  since         DateTime?
+  lastRunAt     DateTime?
+  updatedAt     DateTime  @updatedAt
+}
+
 model UsedCodes {
   id           String       @id @default(uuid())
   code         String

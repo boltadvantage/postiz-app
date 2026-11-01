@@ -14,6 +14,11 @@ export class BoltAnalyticsRegister implements OnModuleInit {
         taskQueue: 'main',
         workflowIdConflictPolicy: 'USE_EXISTING',
       });
+      await this._temporalService.client?.getRawClient()?.workflow?.start('boltInboxWorkflow', {
+        workflowId: 'bolt-inbox',
+        taskQueue: 'main',
+        workflowIdConflictPolicy: 'USE_EXISTING',
+      });
     } catch (err: any) {
       new Logger('BoltAnalytics').warn(`could not start analytics workflow: ${err?.message || err}`);
     }
