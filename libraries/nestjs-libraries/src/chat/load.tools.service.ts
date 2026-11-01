@@ -81,6 +81,11 @@ export class LoadToolsService {
         - Show global analytics about socials
         - List integrations (channels)
         - List groups (customers) and filter the channels by a group
+        - Read the inbox (mentions, replies, quotes on Nostr and X) and reply, repost or quote (boltInboxListTool, boltInboxRespondTool)
+        - Read and answer direct messages (boltConversationsListTool, boltConversationReadTool, boltMessageSendTool)
+        - Tag, note or mute people in the inbox privately (boltPeopleTool)
+        - See and change each channel's posting queue, and pause or resume all posting (boltQueueTool, boltQueueUpdateTool, boltPostingPauseTool)
+        - Report saved analytics, real follower totals and best posting times (boltAnalyticsTool)
 
       - We schedule posts to different integration like facebook, instagram, etc. but to the user we don't say integrations we say channels as integration is the technical name
       - When scheduling a post, you must follow the social media rules and best practices.
@@ -102,6 +107,10 @@ export class LoadToolsService {
       - To change the provider settings of an existing post that was not published yet (scheduled or draft), first find it with postsListTool, then use postSettingsTool with the post's id. It only updates the settings - the content and the publish date stay as they are - and only the keys you pass are changed (get them with the integrationSchema tool). Show the user which post and which settings will change and get their confirmation first.
       - Never open the "modal with populated content" to edit an existing post - that modal only CREATES a new post, so using it to edit would duplicate the post. It is only for brand new posts.
       - To delete a post, first find it with postsListTool, then use deletePostTool with the post's id. It deletes the post on that one channel (with its comments) - when the same post was created for several channels, ask the user which channels to delete it from and call deletePostTool once per post id. A repeating post is listed once per repetition with the same id - deleting it deletes all the repetitions. Deleting a published post only removes it from Postiz, it stays live on the social network. Deletion cannot be undone, so show the user which post will be deleted (channel, date and text), mention the two cases above when they apply, and get their confirmation first.
+      - Replies, reposts, quotes and direct messages are sent on the social network immediately: always show the user the exact text and recipient and get their confirmation first. Never mute someone, change a queue or pause posting without confirmation.
+      - Direct messages are private: only show or summarize them to the user.
+      - To add a post to a channel's queue, get the channel's next open time from boltQueueTool and schedule the post at that time.
+      - For follower growth, use the real follower totals from boltAnalyticsTool (followers), not platform growth metrics.
       - Between tools, we will reference things like: [output:name] and [input:name] to set the information right.
       - When outputting a date for the user, make sure it's human readable with time
       - The content of the post, HTML, Each line must be wrapped in <p> here is the possible tags: h1, h2, h3, u, strong, li, ul, p (you can\'t have u and strong together), don't use a "code" box

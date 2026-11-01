@@ -1,6 +1,8 @@
 'use client';
 
-import { FC, ReactNode } from 'react';
+import { FC, ReactNode, useCallback } from 'react';
+import useSWR from 'swr';
+import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useUser } from '@gitroom/frontend/components/layout/user.context';
 import { useVariables } from '@gitroom/react/helpers/variable.context';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
@@ -290,9 +292,25 @@ export const useMenuItem = () => {
   };
 };
 
+// Bolt Advantage: unread mentions + unread conversations, for the Inbox badge
+const useInboxUnread = (enabled: boolean) => {
+  const fetch = useFetch();
+  const get = useCallback(async (url: string) => {
+    const res = await fetch(url);
+    return res.ok ? res.json() : null;
+  }, []);
+  const { data } = useSWR<{ unread: number; messages?: number } | null>(enabled ? '/inbox/counts' : null, get, {
+    refreshInterval: 60000,
+    revalidateOnFocus: true,
+  });
+  return (data?.unread || 0) + (data?.messages || 0);
+};
+
 export const TopMenu: FC = () => {
   const user = useUser();
   const { firstMenu, secondMenu } = useMenuItem();
+  // @ts-ignore
+  const inboxUnread = useInboxUnread(!!user?.orgId);
   const { isGeneral, billingEnabled } = useVariables();
   return (
     <>
@@ -325,6 +343,7 @@ export const TopMenu: FC = () => {
                   icon={item.icon}
                   key={item.name}
                   onClick={item.onClick}
+                  badge={item.path === '/inbox' ? inboxUnread : undefined}
                 />
               ))
         }

@@ -64,3 +64,46 @@ describe('x inbox', () => {
     ]);
   });
 });
+
+describe('X direct messages', () => {
+  const { parseDmEvents, xIdAfter, isDmPermissionError } = require('./x.inbox');
+  const ME = '100';
+  const page = {
+    data: [
+      { id: '1900', event_type: 'MessageCreate', text: 'thanks!', sender_id: ME, dm_conversation_id: '100-555', created_at: '2026-11-01T12:00:00Z' },
+      { id: '1800', event_type: 'MessageCreate', text: 'love the post', sender_id: '555', dm_conversation_id: '100-555', created_at: '2026-11-01T11:00:00Z' },
+      { id: '1700', event_type: 'MessageCreate', text: 'group hi', sender_id: '777', dm_conversation_id: '1234567890', created_at: '2026-11-01T10:00:00Z' },
+      { id: '1600', event_type: 'ParticipantsJoin', sender_id: '777', dm_conversation_id: '7-100', created_at: '2026-11-01T09:00:00Z' },
+    ],
+    includes: { users: [{ id: '555', username: 'fan', name: 'Fan', profile_image_url: 'https://x/fan.png' }] },
+    meta: { next_token: 'abc' },
+  };
+
+  it('keeps one-to-one messages both ways, skips groups and non-messages', () => {
+    const r = parseDmEvents(page, ME);
+    expect(r.messages.map((m: any) => [m.id, m.peer, m.direction])).toEqual([
+      ['1900', '555', 'out'],
+      ['1800', '555', 'in'],
+    ]);
+    expect(r.people.get('555')).toMatchObject({ handle: 'fan', name: 'Fan' });
+    expect(r.reads).toBe(5);
+    expect(r.nextToken).toBe('abc');
+  });
+
+  it('stops at what we already have', () => {
+    const r = parseDmEvents(page, ME, '1800');
+    expect(r.messages.map((m: any) => m.id)).toEqual(['1900']);
+    expect(r.reachedKnown).toBe(true);
+  });
+
+  it('compares ids too big for numbers', () => {
+    expect(xIdAfter('1856000000000000001', '1856000000000000000')).toBe(true);
+    expect(xIdAfter('1856000000000000000', '1856000000000000001')).toBe(false);
+    expect(xIdAfter('5', null)).toBe(true);
+  });
+
+  it('recognizes a missing DM permission', () => {
+    expect(isDmPermissionError({ code: 403 })).toBe(true);
+    expect(isDmPermissionError({ code: 429 })).toBe(false);
+  });
+});

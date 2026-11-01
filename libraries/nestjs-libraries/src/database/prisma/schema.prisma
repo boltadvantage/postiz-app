@@ -305,13 +305,55 @@ model InboxPerson {
   @@index([organizationId, muted])
 }
 
-/// Bolt Advantage: where each channel's inbox fetch left off.
+/// Bolt Advantage: where each channel's inbox fetch left off. Mentions use the
+/// channel id; direct messages use "dm:<channel id>".
 model InboxCursor {
   integrationId String    @id
   cursor        String?
   since         DateTime?
   lastRunAt     DateTime?
+  /// last problem fetching, shown in the inbox (e.g. missing DM permission)
+  error         String?
   updatedAt     DateTime  @updatedAt
+}
+
+/// Bolt Advantage: a one-to-one direct-message conversation on a channel.
+model InboxConversation {
+  id             String    @id @default(cuid())
+  organizationId String
+  integrationId  String
+  platform       String
+  /// the other person (matches InboxPerson.authorId)
+  peerId         String
+  /// Nostr: "nip04" or "nip17", whichever they last wrote in; X: unused
+  protocol       String?
+  lastMessageAt  DateTime
+  lastPreview    String?
+  lastDirection  String?
+  unread         Int       @default(0)
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@unique([integrationId, peerId])
+  @@index([organizationId, lastMessageAt])
+}
+
+/// Bolt Advantage: one direct message, decrypted.
+model InboxMessage {
+  id             String   @id @default(cuid())
+  organizationId String
+  conversationId String
+  integrationId  String
+  externalId     String
+  direction      String
+  content        String
+  protocol       String?
+  sentAt         DateTime
+  createdAt      DateTime @default(now())
+
+  @@unique([integrationId, externalId])
+  @@index([conversationId, sentAt])
+  @@index([organizationId])
 }
 
 model UsedCodes {

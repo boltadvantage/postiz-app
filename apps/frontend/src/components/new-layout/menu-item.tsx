@@ -4,11 +4,12 @@ import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
 import Link from 'next/link';
 
-export const MenuItem: FC<{ label: string; icon: ReactNode; path: string; onClick?: () => void }> = ({
+export const MenuItem: FC<{ label: string; icon: ReactNode; path: string; onClick?: () => void; badge?: number }> = ({
   label,
   icon,
   path,
   onClick,
+  badge,
 }) => {
   const currentPath = usePathname();
   const isActive = currentPath.indexOf(path) === 0;
@@ -20,7 +21,15 @@ export const MenuItem: FC<{ label: string; icon: ReactNode; path: string; onClic
 
   const inner = (
     <>
-      <div className="custom:scale-90 transition-transform">{icon}</div>
+      <div className="custom:scale-90 transition-transform relative">
+        {icon}
+        {/* Bolt Advantage: unread count (inbox) */}
+        {!!badge && (
+          <span className="absolute -top-[7px] -end-[10px] min-w-[17px] h-[17px] px-[4px] rounded-full bg-red-500 text-white text-[10px] leading-none font-[600] flex items-center justify-center">
+            {badge > 99 ? '99+' : badge}
+          </span>
+        )}
+      </div>
       <div className="custom:text-[9px] minCustom:text-[10px] leading-[1.1] text-center">
         {label}
       </div>
@@ -39,7 +48,7 @@ export const MenuItem: FC<{ label: string; icon: ReactNode; path: string; onClic
     <Link
       prefetch={true}
       href={path}
-      title={label}
+      title={badge ? `${label} (${badge})` : label}
       {...path.indexOf('http') === 0 && { target: '_blank' }}
       className={className}
     >

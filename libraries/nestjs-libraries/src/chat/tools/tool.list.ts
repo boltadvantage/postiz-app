@@ -20,6 +20,7 @@ import { DeletePostTool } from '@gitroom/nestjs-libraries/chat/tools/delete.post
 import { UploadWidgetTool } from '@gitroom/nestjs-libraries/chat/tools/upload.widget.tool';
 import { UploadWidgetTicketTool } from '@gitroom/nestjs-libraries/chat/tools/upload.widget.ticket.tool';
 import { UploadWidgetStatusTool } from '@gitroom/nestjs-libraries/chat/tools/upload.widget.status.tool';
+import { boltTools } from '@gitroom/nestjs-libraries/chat/tools/bolt.tools';
 
 export const toolList = [
   IntegrationListTool,
@@ -44,4 +45,6 @@ export const toolList = [
   UploadWidgetTool,
   UploadWidgetTicketTool,
   UploadWidgetStatusTool,
+  // Bolt Advantage: inbox, messages, people, queue, pause, saved analytics
+  ...boltTools,
 ];
