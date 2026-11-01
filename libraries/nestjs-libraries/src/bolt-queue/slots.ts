@@ -114,10 +114,58 @@ export const MAX_PER_DAY = 12;
 // good general-purpose times to fill a day when history doesn't say enough
 const FILLER_HOURS = [9, 12, 15, 18, 20, 10, 13, 16, 19, 8, 11, 14, 17, 21, 7, 22];
 
+export type DayPick = Slot & { source: 'data' | 'filler'; posts?: number; avgEngagement?: number; lift?: number };
+
 /**
- * Best `n` times for one weekday: highest-scoring hours with enough posts,
- * at least `gapHours` apart, then fillers if there isn't enough history.
+ * Times to add to one weekday so it reaches `n` posts, given the times it
+ * already has: highest-scoring hours with enough posts first, at least
+ * `gapHours` from every other time, then default times if history doesn't say
+ * enough. Never returns more than `n` minus what the day already has.
  */
+export function fillDayTimes(
+  day: number,
+  cells: Array<{ hour: number; posts: number; score: number; avgEngagement?: number }>,
+  existingMinutes: number[],
+  n: number,
+  overall: number,
+  gapHours = 2,
+  minPosts = 2
+): DayPick[] {
+  const want = Math.max(0, Math.min(MAX_PER_DAY, Math.floor(n)) - existingMinutes.length);
+  const taken = [...existingMinutes];
+  const chosen: DayPick[] = [];
+  const fits = (h: number, gap: number) => taken.every((m) => Math.abs(m / 60 - h) >= gap);
+  const take = (p: DayPick) => {
+    chosen.push(p);
+    taken.push(p.minute);
+  };
+  const ranked = cells
+    .filter((c) => c.posts >= minPosts && c.score > overall)
+    .sort((a, b) => b.score - a.score || b.posts - a.posts);
+  for (const c of ranked) {
+    if (chosen.length >= want) break;
+    if (fits(c.hour, gapHours)) {
+      take({
+        day,
+        minute: c.hour * 60,
+        source: 'data',
+        posts: c.posts,
+        avgEngagement: c.avgEngagement,
+        lift: overall ? Math.round((c.score / overall - 1) * 100) / 100 : 0,
+      });
+    }
+  }
+  // fill the rest; relax spacing only if the day is too full to keep it
+  for (const gap of [gapHours, 1]) {
+    for (const h of FILLER_HOURS) {
+      if (chosen.length >= want) break;
+      if (fits(h, gap)) take({ day, minute: h * 60, source: 'filler' });
+    }
+  }
+  return chosen.sort((a, b) => a.minute - b.minute);
+}
+
+/** Best `n` times for one weekday from scratch (what "Pick best times" uses). */
 export function pickDayTimes(
   day: number,
   cells: Array<{ hour: number; posts: number; score: number }>,
@@ -126,24 +174,7 @@ export function pickDayTimes(
   gapHours = 2,
   minPosts = 2
 ): Slot[] {
-  const want = Math.max(0, Math.min(MAX_PER_DAY, Math.floor(n)));
-  const chosen: Slot[] = [];
-  const fits = (h: number, gap: number) => chosen.every((c) => Math.abs(c.minute / 60 - h) >= gap);
-  const ranked = cells
-    .filter((c) => c.posts >= minPosts && c.score > overall)
-    .sort((a, b) => b.score - a.score || b.posts - a.posts);
-  for (const c of ranked) {
-    if (chosen.length >= want) break;
-    if (fits(c.hour, gapHours)) chosen.push({ day, minute: c.hour * 60, source: 'data' });
-  }
-  // fill the rest; relax spacing only if the day is too full to keep it
-  for (const gap of [gapHours, 1]) {
-    for (const h of FILLER_HOURS) {
-      if (chosen.length >= want) break;
-      if (fits(h, gap)) chosen.push({ day, minute: h * 60, source: 'filler' });
-    }
-  }
-  return chosen.sort((a, b) => a.minute - b.minute);
+  return fillDayTimes(day, cells, [], n, overall, gapHours, minPosts).map(({ day: d, minute, source }) => ({ day: d, minute, source }));
 }
 
 export function normalizePerDay(input: unknown): Record<number, number> {

@@ -10,6 +10,7 @@ import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
+import { DayPick, fillDayTimes } from '@gitroom/nestjs-libraries/bolt-queue/slots';
 
 type Slot = { day: number; minute: number; source?: 'data' | 'filler' };
 type Channel = { id: string; name: string; picture: string | null; providerIdentifier: string };
@@ -35,6 +36,8 @@ type Suggestions = {
   channelSampleSize?: number;
   timeZone: string;
   suggestions: Suggestion[];
+  grid: Array<{ weekday: number; hour: number; posts: number; avgEngagement: number; score: number }>;
+  overallAvg: number;
 };
 
 // Monday first, like most calendars
@@ -150,7 +153,17 @@ const Editor: FC<{ row: QueueRow; onSaved: () => void }> = ({ row, onSaved }) =>
   const remove = (s: Slot) => setSlots(slots.filter((x) => !(x.day === s.day && x.minute === s.minute)));
   const copyDay = (from: number, to: number[]) =>
     setSlots(sortSlots([...slots.filter((s) => !to.includes(s.day)), ...to.flatMap((d) => slots.filter((s) => s.day === from).map((s) => ({ day: d, minute: s.minute })))]));
-  const fresh = (sug?.suggestions || []).filter((s) => !has(s));
+  // a day with a count gets exactly enough suggestions to reach it (same picker
+  // as "Pick best times"); a day without one gets the history's standouts
+  const daySuggestions = (day: number): DayPick[] => {
+    if (!sug) return [];
+    if (perDay[day] !== undefined) {
+      const mine = slots.filter((s) => s.day === day).map((s) => s.minute);
+      return fillDayTimes(day, (sug.grid || []).filter((g) => g.weekday === day), mine, perDay[day], sug.overallAvg || 0);
+    }
+    return sug.suggestions.filter((s) => s.day === day && !has(s)).map((s) => ({ ...s, source: 'data' as const }));
+  };
+  const fresh = DAYS.flatMap(daySuggestions);
 
   const save = async () => {
     setSaving(true);
@@ -248,7 +261,7 @@ const Editor: FC<{ row: QueueRow; onSaved: () => void }> = ({ row, onSaved }) =>
       <div className="rounded-[8px] bg-newBgColorInner border border-newTableBorder p-[12px] text-[13px] flex flex-wrap items-center gap-[10px]">
         {!sug ? (
           <span className="text-textItemBlur">{t('loading_suggestions', 'Looking at your history…')}</span>
-        ) : sug.suggestions.length === 0 ? (
+        ) : sug.suggestions.length === 0 && !fresh.length ? (
           <span className="text-textItemBlur">
             {t('no_suggestions', 'Not enough history to suggest times yet. Suggestions appear once posts have a few weeks of stats on the History page.')}
           </span>
@@ -261,16 +274,22 @@ const Editor: FC<{ row: QueueRow; onSaved: () => void }> = ({ row, onSaved }) =>
                     n: sug.sampleSize,
                     c: sug.channelSampleSize || 0,
                   })}{' '}
-              <span className="text-textItemBlur">{t('suggest_hint', 'Dashed times below are suggestions; click one to add it.')}</span>
+              <span className="text-textItemBlur">
+                {hasCounts
+                  ? t('suggest_fill_hint', 'Dashed times fill each day up to its count; click one to add it.')
+                  : t('suggest_hint', 'Dashed times below are suggestions; click one to add it.')}
+              </span>
             </span>
             <button
               type="button"
               disabled={!fresh.length}
-              onClick={() => setSlots(sortSlots([...slots, ...fresh]))}
+              onClick={() => setSlots(sortSlots([...slots, ...fresh.map(({ day, minute, source }) => ({ day, minute, source }))]))}
               className="ms-auto px-[12px] h-[30px] rounded-[6px] bg-[#612BD3] text-white whitespace-nowrap disabled:opacity-40"
             >
               {fresh.length
                 ? t('add_all_suggestions', 'Add all {{n}} suggestions', { n: fresh.length })
+                : hasCounts
+                ? t('days_full', 'Every day has its count')
                 : t('all_suggestions_added', 'All suggestions added')}
             </button>
           </>
@@ -281,12 +300,18 @@ const Editor: FC<{ row: QueueRow; onSaved: () => void }> = ({ row, onSaved }) =>
         {DAYS.map((day) => {
           const mine = slots.filter((s) => s.day === day);
           const suggested = fresh.filter((s) => s.day === day);
+          const over = perDay[day] !== undefined && mine.length > perDay[day];
           return (
             <div key={day} className="rounded-[8px] bg-newTableHeader p-[10px] flex flex-col gap-[6px] min-h-[180px]">
               <div className="flex items-center justify-between text-[13px]">
                 <span className="font-[500]">{DAY_NAMES[day]}</span>
                 <Stepper value={perDay[day]} onChange={(v) => setCount(day, v)} />
               </div>
+              {over && (
+                <div className="text-[11px] text-amber-400 -mt-[2px]">
+                  {t('over_count', '{{n}} more than your count', { n: mine.length - perDay[day] })}
+                </div>
+              )}
               {mine.map((s) => (
                 <div
                   key={s.minute}
@@ -309,12 +334,20 @@ const Editor: FC<{ row: QueueRow; onSaved: () => void }> = ({ row, onSaved }) =>
                 <button
                   type="button"
                   key={`s${s.minute}`}
-                  onClick={() => add(s)}
-                  title={t('suggestion_tooltip', '{{avg}} avg engagement over {{n}} posts', { avg: s.avgEngagement, n: s.posts })}
+                  onClick={() => add({ day: s.day, minute: s.minute, source: s.source })}
+                  title={
+                    s.source === 'filler'
+                      ? t('filler_time', 'Default time: not enough history for this day yet')
+                      : t('suggestion_tooltip', '{{avg}} avg engagement over {{n}} posts', { avg: s.avgEngagement, n: s.posts })
+                  }
                   className="flex items-center justify-between gap-[4px] rounded-[6px] border border-dashed border-[#8A63E8] px-[6px] h-[28px] text-[12px] text-start whitespace-nowrap overflow-hidden"
                 >
                   <span className="truncate">+{label(s.minute)}</span>
-                  {s.lift > 0 && <span className="text-[10px] text-green-400 shrink-0">+{Math.round(s.lift * 100)}%</span>}
+                  {s.source === 'filler' ? (
+                    <span className="text-[10px] text-textItemBlur shrink-0">{t('default_short', 'default')}</span>
+                  ) : (
+                    !!s.lift && s.lift > 0 && <span className="text-[10px] text-green-400 shrink-0">+{Math.round(s.lift * 100)}%</span>
+                  )}
                 </button>
               ))}
               <AddTime onAdd={(minute) => add({ day, minute })} />
