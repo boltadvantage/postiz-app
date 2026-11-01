@@ -77,3 +77,14 @@ describe('nostr inbox: building events', () => {
     expect(() => secretKeyFromHex('nsec1notahexkey')).toThrow();
   });
 });
+
+describe('relay lists from Nostr events', () => {
+  const { publicRelays } = require('./nostr.inbox');
+  it('drops internal, loopback and non-wss addresses', async () => {
+    const out = await publicRelays(
+      ['wss://10.0.0.5:5432', 'wss://127.0.0.1', 'wss://192.168.1.10', 'wss://[::1]', 'wss://localhost', 'ws://1.1.1.1', 'https://1.1.1.1', 'wss://169.254.169.254', 'wss://1.1.1.1/'],
+      8
+    );
+    expect(out).toEqual(['wss://1.1.1.1']);
+  });
+});
