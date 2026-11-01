@@ -798,11 +798,9 @@ export const AddProviderComponent: FC<{
                     'opacity-40 outline-dashed outline-1 outline-newTableBorder'
                 )}
               >
-                {editingHidden && (
+                {editingHidden && hidden.includes(item.identifier) && (
                   <div className="absolute top-[8px] start-[8px] text-[11px] px-[6px] rounded-[4px] bg-newBgColorInner">
-                    {hidden.includes(item.identifier)
-                      ? t('hidden', 'Hidden')
-                      : t('shown', 'Shown')}
+                    {t('hidden', 'Hidden')}
                   </div>
                 )}
                 <div>
