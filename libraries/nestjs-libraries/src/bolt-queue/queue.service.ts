@@ -15,23 +15,24 @@ export type Suggestion = {
   minute: number;
   posts: number;
   avgEngagement: number;
-  /** vs the data set's average engagement per post, e.g. 0.45 = 45% better */
+  /** cautious score vs the average engagement per post, e.g. 0.45 = 45% better */
   lift: number;
 };
 
 /** Turn a best-times grid into ranked suggestions per weekday. */
 export function rankSuggestions(
-  grid: Array<{ weekday: number; hour: number; posts: number; avgEngagement: number }>,
+  grid: Array<{ weekday: number; hour: number; posts: number; avgEngagement: number; score: number }>,
   perDay = 3,
   minPosts = 2
 ): Suggestion[] {
   const totalPosts = grid.reduce((s, g) => s + g.posts, 0);
   const avg = totalPosts ? grid.reduce((s, g) => s + g.avgEngagement * g.posts, 0) / totalPosts : 0;
+  // rank on the cautious score and only suggest slots that beat the average
   const out: Suggestion[] = [];
   for (let day = 0; day < 7; day++) {
     grid
-      .filter((g) => g.weekday === day && g.posts >= minPosts && g.avgEngagement > 0)
-      .sort((a, b) => b.avgEngagement - a.avgEngagement || b.posts - a.posts)
+      .filter((g) => g.weekday === day && g.posts >= minPosts && g.score > avg)
+      .sort((a, b) => b.score - a.score || b.posts - a.posts)
       .slice(0, perDay)
       .forEach((g) =>
         out.push({
@@ -39,7 +40,7 @@ export function rankSuggestions(
           minute: g.hour * 60,
           posts: g.posts,
           avgEngagement: g.avgEngagement,
-          lift: avg ? Math.round((g.avgEngagement / avg - 1) * 100) / 100 : 0,
+          lift: avg ? Math.round((g.score / avg - 1) * 100) / 100 : 0,
         })
       );
   }

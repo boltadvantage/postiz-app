@@ -22,7 +22,18 @@ export function localSlot(date: Date, timeZone: string) {
   return { weekday, hour };
 }
 
-export type SlotStat = { weekday: number; hour: number; posts: number; avgEngagement: number };
+export type SlotStat = {
+  weekday: number;
+  hour: number;
+  posts: number;
+  avgEngagement: number;
+  /** avgEngagement pulled toward the overall average until a slot has enough posts */
+  score: number;
+};
+
+// A slot "borrows" this many posts' worth of the overall average, so two lucky
+// posts can't outrank a time that has done well many times.
+export const SHRINK_POSTS = 5;
 
 /**
  * Average engagement per weekday x hour, and the best hours per weekday.
@@ -43,21 +54,23 @@ export function bestTimes(
     c.total += p.engagement;
     cells.set(key, c);
   }
+  const overall = posts.length ? posts.reduce((s, p) => s + p.engagement, 0) / posts.length : 0;
   const grid: SlotStat[] = [...cells.values()].map((c) => ({
     weekday: c.weekday,
     hour: c.hour,
     posts: c.posts,
     avgEngagement: Math.round((c.total / c.posts) * 10) / 10,
+    score: Math.round(((c.total + SHRINK_POSTS * overall) / (c.posts + SHRINK_POSTS)) * 10) / 10,
   }));
   const recommended = WEEKDAYS.map((_, weekday) =>
     grid
       .filter((g) => g.weekday === weekday && g.posts >= minPosts)
-      .sort((a, b) => b.avgEngagement - a.avgEngagement || b.posts - a.posts)
+      .sort((a, b) => b.score - a.score || b.posts - a.posts)
       .slice(0, perDay)
       .map((g) => g.hour)
       .sort((a, b) => a - b)
   );
-  return { grid, recommended, sampleSize: posts.length };
+  return { grid, recommended, sampleSize: posts.length, overallAvg: Math.round(overall * 10) / 10 };
 }
 
 /**

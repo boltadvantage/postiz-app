@@ -27,7 +27,7 @@ describe('best times', () => {
     ];
     const r = bestTimes(posts, 'America/Chicago');
     expect(r.recommended[1]).toEqual([8, 12]);
-    expect(r.grid.find((g) => g.weekday === 1 && g.hour === 8)).toEqual({ weekday: 1, hour: 8, posts: 2, avgEngagement: 20 });
+    expect(r.grid.find((g) => g.weekday === 1 && g.hour === 8)).toMatchObject({ weekday: 1, hour: 8, posts: 2, avgEngagement: 20 });
     expect(r.sampleSize).toBe(5);
     expect(r.recommended[0]).toEqual([]);
   });
