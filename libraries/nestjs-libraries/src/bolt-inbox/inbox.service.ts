@@ -88,11 +88,11 @@ export class InboxService {
     return ioRedis.get(LOCK_KEY).then((v) => !!v);
   }
 
-  private cursor(integrationId: string) {
+  cursor(integrationId: string) {
     return this._prisma.inboxCursor.findUnique({ where: { integrationId } });
   }
 
-  private saveCursor(integrationId: string, data: { cursor?: string | null; since?: Date | null }) {
+  saveCursor(integrationId: string, data: { cursor?: string | null; since?: Date | null; error?: string | null }) {
     return this._prisma.inboxCursor.upsert({
       where: { integrationId },
       create: { integrationId, ...data, lastRunAt: new Date() },
@@ -100,7 +100,7 @@ export class InboxService {
     });
   }
 
-  private async mutedAuthors(organizationId: string, platform: string) {
+  async mutedAuthors(organizationId: string, platform: string) {
     const rows = await this._prisma.inboxPerson.findMany({
       where: { organizationId, platform, muted: true },
       select: { authorId: true },
@@ -108,7 +108,7 @@ export class InboxService {
     return new Set(rows.map((r) => r.authorId));
   }
 
-  private async upsertPerson(organizationId: string, platform: string, authorId: string, p: { handle?: string; name?: string; avatar?: string }) {
+  async upsertPerson(organizationId: string, platform: string, authorId: string, p: { handle?: string; name?: string; avatar?: string }) {
     const data = {
       ...(p.handle ? { handle: clip(p.handle, 100) } : {}),
       ...(p.name ? { name: clip(p.name, 100) } : {}),
@@ -162,12 +162,12 @@ export class InboxService {
     }
   }
 
-  private async xBudgetLeft() {
+  async xBudgetLeft() {
     const row = await this._prisma.analyticsApiUsage.findUnique({ where: { provider_date: { provider: X_INBOX_USAGE, date: dayKey() } } });
     return Math.max(0, X_INBOX_READS() - (row?.reads || 0));
   }
 
-  private addUsage(provider: string, n: number) {
+  addUsage(provider: string, n: number) {
     return this._prisma.analyticsApiUsage.upsert({
       where: { provider_date: { provider, date: dayKey() } },
       create: { provider, date: dayKey(), reads: n },
@@ -175,7 +175,7 @@ export class InboxService {
     });
   }
 
-  private async token(integration: Integration) {
+  async token(integration: Integration) {
     if (!integration.tokenExpiration || dayjs(integration.tokenExpiration).isAfter(dayjs())) return integration.token;
     const r = await this._refreshIntegrationService.refresh(integration, 'bolt-inbox');
     if (!r) throw new Error('Reconnect this channel');
@@ -318,7 +318,7 @@ export class InboxService {
     return { item, integration };
   }
 
-  private nostrSecret(integration: Integration) {
+  nostrSecret(integration: Integration) {
     const { password } = (AuthService.verifyJWT(integration.token) as any) || {};
     return String(password || '');
   }

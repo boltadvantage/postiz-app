@@ -232,6 +232,22 @@ export class BoltAnalyticsQueries {
     return { timeZone, ...bestTimes(posts, timeZone) };
   }
 
+  /** Daily real follower totals per channel (what followers.csv exports), for the API and bots. */
+  async followers(organizationId: string, days: number) {
+    const channels = await this.channels(organizationId);
+    const rows = await this._prisma.analyticsChannelDaily.findMany({
+      where: { organizationId, followers: { not: null }, date: { gte: dayKey(dayjs().subtract(days, 'day').toDate()) } },
+      orderBy: { date: 'asc' },
+      select: { integrationId: true, date: true, followers: true },
+    });
+    return channels.map((ch) => ({
+      integrationId: ch.id,
+      name: ch.name,
+      platform: ch.providerIdentifier,
+      daily: rows.filter((r) => r.integrationId === ch.id).map((r) => ({ date: r.date, followers: r.followers as number })),
+    }));
+  }
+
   /** One row per channel per day with a real follower total. */
   async followersCsv(organizationId: string, days: number) {
     const channels = new Map((await this.channels(organizationId)).map((c) => [c.id, c]));

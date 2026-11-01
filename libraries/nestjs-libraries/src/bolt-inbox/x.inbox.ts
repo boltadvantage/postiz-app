@@ -78,3 +78,97 @@ export class XInbox {
     return r.data.id;
   }
 }
+
+export type XDm = {
+  id: string;
+  peer: string;
+  direction: 'in' | 'out';
+  text: string;
+  createdAt: Date;
+  conversationId: string;
+};
+
+/** Newer-than for X ids (snowflakes, too big for Number). */
+export const xIdAfter = (a: string, b?: string | null) => !b || BigInt(a) > BigInt(b);
+
+/**
+ * One dm_events page → one-to-one messages newer than `afterId`, the people in
+ * them, and how many billable items X returned. Group conversations are skipped.
+ */
+export function parseDmEvents(res: any, self: string, afterId?: string | null) {
+  const users = new Map<string, any>((res?.includes?.users || []).map((u: any) => [u.id, u]));
+  const messages: XDm[] = [];
+  let reachedKnown = false;
+  for (const e of res?.data || []) {
+    if (!xIdAfter(e.id, afterId)) {
+      reachedKnown = true;
+      continue;
+    }
+    if (e.event_type && e.event_type !== 'MessageCreate') continue;
+    // one-to-one conversation ids are "<smaller id>-<larger id>"
+    const pair = String(e.dm_conversation_id || '').split('-');
+    if (pair.length !== 2 || !pair.includes(self)) continue;
+    const peer = pair[0] === self ? pair[1] : pair[0];
+    messages.push({
+      id: e.id,
+      peer,
+      direction: e.sender_id === self ? 'out' : 'in',
+      text: e.text || '',
+      createdAt: new Date(e.created_at),
+      conversationId: e.dm_conversation_id,
+    });
+  }
+  const people = new Map(
+    [...users.values()].map((u) => [u.id, { id: u.id, handle: u.username, name: u.name, avatar: u.profile_image_url }])
+  );
+  const reads = (res?.data?.length || 0) + (res?.includes?.users?.length || 0);
+  return { messages, people, reads, reachedKnown, nextToken: res?.meta?.next_token as string | undefined };
+}
+
+/** X answers 403 when the app or the connection lacks Direct Message permission. */
+export const isDmPermissionError = (err: any) => err?.code === 403 || err?.data?.status === 403;
+
+export class XDms {
+  private client: TwitterApi;
+
+  constructor(token: string) {
+    const [accessToken, accessSecret] = token.split(':');
+    this.client = new TwitterApi({
+      appKey: process.env.X_API_KEY!,
+      appSecret: process.env.X_API_SECRET!,
+      accessToken,
+      accessSecret,
+    });
+  }
+
+  /** Newest-first pages until we reach what we already have, run out of budget, or pass `oldest`. */
+  async since(self: string, opts: { afterId?: string | null; budget: number; oldest: Date }) {
+    const messages: XDm[] = [];
+    const people = new Map<string, { id: string; handle?: string; name?: string; avatar?: string }>();
+    let reads = 0;
+    let token: string | undefined;
+    while (reads < opts.budget) {
+      const res = await this.client.v2.get('dm_events', {
+        max_results: Math.min(100, Math.max(1, opts.budget - reads)),
+        event_types: 'MessageCreate',
+        'dm_event.fields': 'id,text,event_type,dm_conversation_id,created_at,sender_id',
+        expansions: 'sender_id',
+        'user.fields': 'username,name,profile_image_url',
+        ...(token ? { pagination_token: token } : {}),
+      });
+      const page = parseDmEvents(res, self, opts.afterId);
+      reads += Math.max(1, page.reads);
+      messages.push(...page.messages);
+      page.people.forEach((v, k) => people.set(k, v));
+      const oldestOnPage = page.messages[page.messages.length - 1]?.createdAt;
+      token = page.nextToken;
+      if (page.reachedKnown || !token || (oldestOnPage && oldestOnPage < opts.oldest)) break;
+    }
+    return { messages: messages.filter((m) => m.createdAt >= opts.oldest), people, reads };
+  }
+
+  async send(peerId: string, text: string) {
+    const r = await this.client.v2.sendDmToParticipant(peerId, { text });
+    return { id: r.dm_event_id, conversationId: r.dm_conversation_id };
+  }
+}

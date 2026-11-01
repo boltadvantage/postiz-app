@@ -9,6 +9,8 @@ import { BoltAnalyticsQueries } from '@gitroom/nestjs-libraries/bolt-analytics/b
 import { QueueService } from '@gitroom/nestjs-libraries/bolt-queue/queue.service';
 import { PauseService } from '@gitroom/nestjs-libraries/bolt-queue/pause.service';
 import { InboxService } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
+import { DmService } from '@gitroom/nestjs-libraries/bolt-inbox/dm.service';
+import { BoltApiService } from '@gitroom/nestjs-libraries/bolt-api/bolt.api.service';
 import { TwoFactorRepository } from '@gitroom/nestjs-libraries/database/prisma/two-factor/two-factor.repository';
 import { TwoFactorService } from '@gitroom/nestjs-libraries/database/prisma/two-factor/two-factor.service';
 import { ChannelVisibilityRepository } from '@gitroom/nestjs-libraries/database/prisma/channel-visibility/channel-visibility.repository';
@@ -74,6 +76,8 @@ import { AdminStatsService } from '@gitroom/nestjs-libraries/database/prisma/adm
     QueueService,
     PauseService,
     InboxService,
+    DmService,
+    BoltApiService,
     TwoFactorService,
     TwoFactorRepository,
     ChannelVisibilityRepository,

@@ -1,7 +1,8 @@
 'use client';
 
 // Bolt Advantage: inbox — mentions, replies and quotes across channels, with
-// private tags and mutes per person, and reply / quote / repost in place.
+// private tags and mutes per person, and reply / quote / repost in place,
+// plus direct messages (see messages.tsx).
 import React, { FC, useCallback, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import clsx from 'clsx';
@@ -11,19 +12,10 @@ import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
+import { Channel, Person, PersonPanel, pretty, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
+import { Messages } from '@gitroom/frontend/components/bolt-inbox/messages';
 dayjs.extend(relativeTime);
 
-type Person = {
-  id: string;
-  platform: string;
-  authorId: string;
-  handle: string | null;
-  name: string | null;
-  avatar: string | null;
-  tags: string[];
-  muted: boolean;
-  note: string | null;
-};
 type Item = {
   id: string;
   integrationId: string;
@@ -40,8 +32,6 @@ type Item = {
   quotedAt: string | null;
   person: Person | null;
 };
-type Channel = { id: string; name: string; picture: string | null; identifier: string };
-type Status = 'open' | 'unread' | 'archived' | 'all';
 
 const KINDS: Array<{ value: Item['kind']; label: string }> = [
   { value: 'mention', label: 'Mentions' },
@@ -50,12 +40,6 @@ const KINDS: Array<{ value: Item['kind']; label: string }> = [
 ];
 const LIMITS: Record<string, number> = { x: 280 };
 const short = (s: string | null, n = 140) => (s && s.length > n ? `${s.slice(0, n)}…` : s || '');
-// Nostr clients render nostr: links as embeds; show a short label instead of the raw code
-const pretty = (s: string) =>
-  s.replace(/nostr:(note|nevent|npub|nprofile|naddr)1[0-9a-z]+/g, (_m, type: string) =>
-    type === 'npub' || type === 'nprofile' ? '↗ profile' : '↗ note'
-  );
-
 const Composer: FC<{ mode: 'reply' | 'quote'; platform: string; busy: boolean; onSend: (text: string) => void; onCancel: () => void }> = ({
   mode,
   platform,
@@ -89,88 +73,6 @@ const Composer: FC<{ mode: 'reply' | 'quote'; platform: string; busy: boolean; o
           className="px-[14px] h-[30px] rounded-[6px] bg-[#612BD3] text-white disabled:opacity-40"
         >
           {busy ? t('sending', 'Sending…') : mode === 'reply' ? t('send_reply', 'Reply') : t('send_quote', 'Quote')}
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const PersonPanel: FC<{ person: Person; allTags: string[]; onSaved: () => void; onClose: () => void }> = ({ person, allTags, onSaved, onClose }) => {
-  const t = useT();
-  const fetch = useFetch();
-  const toaster = useToaster();
-  const [tags, setTags] = useState<string[]>(person.tags);
-  const [draft, setDraft] = useState('');
-  const [muted, setMuted] = useState(person.muted);
-  const [note, setNote] = useState(person.note || '');
-  const [saving, setSaving] = useState(false);
-  const addTag = (raw: string) => {
-    const tag = raw.trim().toLowerCase().slice(0, 30);
-    if (tag && !tags.includes(tag)) setTags([...tags, tag]);
-    setDraft('');
-  };
-  const save = async () => {
-    setSaving(true);
-    const res = await fetch(`/inbox/people/${person.id}`, { method: 'PUT', body: JSON.stringify({ tags, muted, note }) });
-    setSaving(false);
-    if (!res.ok) return toaster.show(t('could_not_save', 'Could not save'), 'warning');
-    toaster.show(muted ? t('person_muted', 'Muted. Their posts are hidden and new ones won’t be saved.') : t('saved', 'Saved'), 'success');
-    onSaved();
-    onClose();
-  };
-  const suggestions = allTags.filter((x) => !tags.includes(x) && (!draft || x.includes(draft.toLowerCase()))).slice(0, 6);
-  return (
-    <div className="mt-[8px] rounded-[8px] border border-newTableBorder bg-newBgColorInner p-[12px] flex flex-col gap-[10px] text-[13px]">
-      <div className="flex items-center gap-[8px]">
-        <span className="font-[500]">{person.name || person.handle || t('unknown', 'Unknown')}</span>
-        <span className="text-textItemBlur">{person.handle ? `@${person.handle}` : ''}</span>
-        <span className="ms-auto text-[11px] text-textItemBlur">{t('private_to_you', 'Only visible in your inbox')}</span>
-      </div>
-      <div className="flex flex-wrap items-center gap-[6px]">
-        {tags.map((tag) => (
-          <span key={tag} className="flex items-center gap-[4px] rounded-full bg-[#612BD3]/30 px-[8px] h-[24px]">
-            {tag}
-            <button type="button" onClick={() => setTags(tags.filter((x) => x !== tag))} className="opacity-60 hover:opacity-100">×</button>
-          </span>
-        ))}
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ',') {
-              e.preventDefault();
-              addTag(draft);
-            }
-          }}
-          placeholder={t('add_tag', 'Add tag…')}
-          className="bg-transparent border border-newTableBorder rounded-full px-[10px] h-[24px] outline-none w-[120px]"
-        />
-        {suggestions.map((s) => (
-          <button key={s} type="button" onClick={() => addTag(s)} className="rounded-full border border-dashed border-newTableBorder px-[8px] h-[24px] text-textItemBlur">
-            + {s}
-          </button>
-        ))}
-      </div>
-      <label className="flex items-start gap-[8px] cursor-pointer">
-        <input type="checkbox" checked={muted} onChange={(e) => setMuted(e.target.checked)} className="mt-[2px]" />
-        <span>
-          {t('mute_person', 'Mute this person')}
-          <span className="block text-[12px] text-textItemBlur">
-            {t('mute_explain', 'Hides everything from them here and stops saving their new posts. They aren’t blocked or notified. Unmute any time.')}
-          </span>
-        </span>
-      </label>
-      <textarea
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        rows={2}
-        placeholder={t('private_note', 'Private note…')}
-        className="bg-transparent border border-newTableBorder rounded-[6px] p-[8px] outline-none resize-y"
-      />
-      <div className="flex gap-[8px] justify-end">
-        <button type="button" onClick={onClose} className="px-[12px] h-[30px] rounded-[6px] border border-newTableBorder">{t('cancel', 'Cancel')}</button>
-        <button type="button" disabled={saving} onClick={save} className="px-[14px] h-[30px] rounded-[6px] bg-[#612BD3] text-white disabled:opacity-40">
-          {saving ? t('saving', 'Saving…') : t('save', 'Save')}
         </button>
       </div>
     </div>
@@ -270,6 +172,7 @@ export const Inbox = () => {
   const t = useT();
   const fetch = useFetch();
   const toaster = useToaster();
+  const [view, setView] = useState<'mentions' | 'messages'>('mentions');
   const [status, setStatus] = useState<Status>('open');
   const [channels, setChannels] = useState<string[]>([]);
   const [kinds, setKinds] = useState<string[]>([]);
@@ -289,8 +192,8 @@ export const Inbox = () => {
     ...(showMuted ? { showMuted: 'true' } : {}),
     ...(search ? { q: search } : {}),
   }).toString();
-  const { data, mutate, isLoading } = useSWR<{ total: number; pages: number; items: Item[] }>(`/inbox?${query}`, get, { refreshInterval: 60000 });
-  const { data: counts, mutate: mutateCounts } = useSWR<{ unread: number; byChannel: Record<string, number> }>('/inbox/counts', get, { refreshInterval: 60000 });
+  const { data, mutate, isLoading } = useSWR<{ total: number; pages: number; items: Item[] }>(view === 'mentions' ? `/inbox?${query}` : null, get, { refreshInterval: 60000 });
+  const { data: counts, mutate: mutateCounts } = useSWR<{ unread: number; byChannel: Record<string, number>; messages: number }>('/inbox/counts', get, { refreshInterval: 60000 });
   const { data: tags, mutate: mutateTags } = useSWR<Array<{ tag: string; people: number }>>('/inbox/tags', get);
   const { data: muted, mutate: mutateMuted } = useSWR<Person[]>('/inbox/people?muted=true', get);
   const { data: integrations } = useSWR<{ integrations: Channel[] }>('/integrations/list', get);
@@ -312,7 +215,7 @@ export const Inbox = () => {
 
   const syncNow = async () => {
     const r = await (await fetch('/inbox/sync', { method: 'POST' })).json();
-    toaster.show(r.started ? t('checking_inbox', 'Checking for new mentions…') : t('sync_running', 'A check is already running.'), 'success');
+    toaster.show(r.started ? t('checking_inbox', 'Checking for new mentions and messages…') : t('sync_running', 'A check is already running.'), 'success');
     setTimeout(refresh, 8000);
   };
   const markAllRead = async () => {
@@ -332,11 +235,23 @@ export const Inbox = () => {
   return (
     <div className="bg-newBgColorInner flex flex-1 min-h-0 mobile:flex-col">
       <div className="w-[230px] mobile:w-full shrink-0 p-[16px] flex flex-col gap-[18px] border-e border-newTableBorder overflow-y-auto">
+        <div className="grid grid-cols-2 gap-[4px] p-[3px] rounded-[8px] bg-newTableHeader text-[13px]">
+          {(['mentions', 'messages'] as const).map((v) => {
+            const n = v === 'mentions' ? counts?.unread : counts?.messages;
+            return (
+              <button key={v} type="button" onClick={() => (setView(v), setPage(0))} className={clsx('h-[30px] rounded-[6px] flex items-center justify-center gap-[6px]', view === v ? 'bg-[#612BD3] text-white' : 'hover:bg-newBgColorInner')}>
+                {v === 'mentions' ? t('mentions', 'Mentions') : t('messages', 'Messages')}
+                {!!n && <span className="min-w-[16px] h-[16px] px-[4px] rounded-full bg-red-500 text-white text-[10px] font-[600] flex items-center justify-center">{n}</span>}
+              </button>
+            );
+          })}
+        </div>
         <div className={side}>
           {(['open', 'unread', 'archived', 'all'] as Status[]).map((s) => (
             <button key={s} type="button" onClick={() => (setStatus(s), setPage(0))} className={pill(status === s)}>
               {s === 'open' ? t('inbox', 'Inbox') : s === 'unread' ? t('unread', 'Unread') : s === 'archived' ? t('archived', 'Archived') : t('all', 'All')}
-              {s === 'unread' && !!counts?.unread && <span className="ms-auto text-[11px]">{counts.unread}</span>}
+              {s === 'unread' && view === 'mentions' && !!counts?.unread && <span className="ms-auto text-[11px]">{counts.unread}</span>}
+              {s === 'unread' && view === 'messages' && !!counts?.messages && <span className="ms-auto text-[11px]">{counts.messages}</span>}
             </button>
           ))}
         </div>
@@ -346,12 +261,12 @@ export const Inbox = () => {
             <button key={c.id} type="button" onClick={() => toggle(channels, setChannels, c.id)} className={pill(channels.includes(c.id))}>
               <img src={c.picture || `/icons/platforms/${c.identifier}.png`} className="w-[18px] h-[18px] rounded-full" alt="" />
               <span className="truncate">{c.name}</span>
-              {!!counts?.byChannel[c.id] && <span className="ms-auto text-[11px]">{counts.byChannel[c.id]}</span>}
+              {view === 'mentions' && !!counts?.byChannel[c.id] && <span className="ms-auto text-[11px]">{counts.byChannel[c.id]}</span>}
             </button>
           ))}
           {!channelList.length && <div className="text-[12px] text-textItemBlur">{t('inbox_no_channels', 'Connect X or Nostr to use the inbox.')}</div>}
         </div>
-        <div className={side}>
+        <div className={clsx(side, view === 'messages' && 'hidden')}>
           <div className="text-[11px] uppercase text-textItemBlur tracking-wide">{t('type', 'Type')}</div>
           {KINDS.map((k) => (
             <button key={k.value} type="button" onClick={() => toggle(kinds, setKinds, k.value)} className={pill(kinds.includes(k.value))}>
@@ -392,7 +307,7 @@ export const Inbox = () => {
 
       <div className="flex-1 min-w-0 p-[16px] flex flex-col gap-[12px] overflow-y-auto">
         <div className="flex flex-wrap items-center gap-[10px]">
-          <h2 className="text-[20px] font-[500] me-auto">{t('inbox', 'Inbox')}</h2>
+          <h2 className="text-[20px] font-[500] me-auto">{view === 'messages' ? t('messages', 'Messages') : t('inbox', 'Inbox')}</h2>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -403,18 +318,29 @@ export const Inbox = () => {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder={t('search_inbox', 'Search…')}
+              placeholder={view === 'messages' ? t('search_messages', 'Search people or messages…') : t('search_inbox', 'Search…')}
               className="bg-newTableHeader border border-newTableBorder rounded-[8px] h-[34px] px-[12px] text-[13px] outline-none w-[220px]"
             />
           </form>
-          <button type="button" onClick={markAllRead} className="px-[12px] h-[34px] rounded-[8px] border border-newTableBorder text-[13px] whitespace-nowrap">
+          <button type="button" onClick={markAllRead} className={clsx('px-[12px] h-[34px] rounded-[8px] border border-newTableBorder text-[13px] whitespace-nowrap', view === 'messages' && 'hidden')}>
             {t('mark_page_read', 'Mark all read')}
           </button>
           <button type="button" onClick={syncNow} className="px-[12px] h-[34px] rounded-[8px] bg-[#612BD3] text-white text-[13px] whitespace-nowrap">
             {t('check_now', 'Check now')}
           </button>
         </div>
-        {isLoading && !data ? (
+        {view === 'messages' ? (
+          <Messages
+            status={status}
+            channels={channels}
+            tag={tag}
+            showMuted={showMuted}
+            search={search}
+            channelById={channelById}
+            allTags={(tags || []).map((x) => x.tag)}
+            onChanged={refresh}
+          />
+        ) : isLoading && !data ? (
           <LoadingComponent />
         ) : !data?.items.length ? (
           <div className="text-[14px] text-textItemBlur py-[24px] text-center">
@@ -423,7 +349,7 @@ export const Inbox = () => {
         ) : (
           data.items.map((item) => <Row key={item.id} item={item} channel={channelById.get(item.integrationId)} allTags={(tags || []).map((x) => x.tag)} refresh={refresh} />)
         )}
-        {!!data && data.pages > 1 && (
+        {view === 'mentions' && !!data && data.pages > 1 && (
           <div className="flex gap-[8px] justify-end text-[13px]">
             <button type="button" disabled={page === 0} onClick={() => setPage(page - 1)} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder disabled:opacity-40">{t('previous', 'Previous')}</button>
             <span className="self-center text-textItemBlur">{page + 1} / {data.pages}</span>
