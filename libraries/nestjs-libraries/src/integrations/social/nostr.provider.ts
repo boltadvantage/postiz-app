@@ -102,37 +102,23 @@ export class NostrProvider extends SocialAbstract implements SocialProvider {
     return {};
   }
 
+  // Bolt Advantage: return the id of the event we signed once any relay accepts
+  // it. Upstream asked each relay for the author's latest note right after
+  // publishing, which can return an older note and record the wrong id.
   private async publish(pubkey: string, event: any) {
-    let id = '';
+    let accepted = false;
     for (const relay of list) {
       try {
         const relayInstance = await Relay.connect(relay);
-        const value = new Promise<any>((resolve) => {
-          relayInstance.subscribe([{ kinds: [1], authors: [pubkey] }], {
-            eoseTimeout: 6000,
-            onevent: (event) => {
-              resolve(event);
-            },
-            oneose: () => {
-              resolve({});
-            },
-            onclose: () => {
-              resolve({});
-            },
-          });
-        });
-
         await relayInstance.publish(event);
-        const all = await value;
         relayInstance.close();
-        // relayInstance.close();
-        id = id || all?.id;
+        accepted = true;
       } catch (err) {
         /**empty**/
       }
     }
 
-    return id;
+    return accepted ? event.id : '';
   }
 
   async authenticate(params: {

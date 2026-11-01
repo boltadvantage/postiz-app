@@ -151,6 +151,74 @@ model HiddenProvider {
   @@id([organizationId, identifier])
 }
 
+/// Bolt Advantage: saved analytics. One row per post on a channel, whether it
+/// was published through Postiz (postId set) or imported from the platform.
+model AnalyticsPost {
+  id             String    @id @default(cuid())
+  organizationId String
+  integrationId  String
+  externalId     String
+  postId         String?
+  source         String    @default("postiz")
+  publishedAt    DateTime
+  url            String?
+  content        String?
+  metrics        String    @default("{}")
+  impressions    Int       @default(0)
+  engagement     Int       @default(0)
+  lastSyncedAt   DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([integrationId, externalId])
+  @@index([organizationId, publishedAt])
+  @@index([integrationId, publishedAt])
+  @@index([lastSyncedAt])
+}
+
+/// Bolt Advantage: a post's numbers at one point in time, for growth curves.
+model AnalyticsSnapshot {
+  id              String   @id @default(cuid())
+  analyticsPostId String
+  capturedAt      DateTime @default(now())
+  metrics         String
+  impressions     Int      @default(0)
+  engagement      Int      @default(0)
+
+  @@index([analyticsPostId, capturedAt])
+}
+
+/// Bolt Advantage: one row per channel per day (followers and channel totals).
+model AnalyticsChannelDaily {
+  integrationId  String
+  date           String
+  organizationId String
+  followers      Int?
+  metrics        String   @default("{}")
+  updatedAt      DateTime @updatedAt
+
+  @@id([integrationId, date])
+  @@index([organizationId, date])
+}
+
+/// Bolt Advantage: paid API reads per provider per day (the X spending cap).
+model AnalyticsApiUsage {
+  provider String
+  date     String
+  reads    Int    @default(0)
+
+  @@id([provider, date])
+}
+
+/// Bolt Advantage: per-channel backfill progress so imports resume across runs.
+model AnalyticsBackfill {
+  integrationId String   @id
+  untilDate     DateTime
+  cursor        String?
+  done          Boolean  @default(false)
+  updatedAt     DateTime @updatedAt
+}
+
 model UsedCodes {
   id           String       @id @default(uuid())
   code         String
