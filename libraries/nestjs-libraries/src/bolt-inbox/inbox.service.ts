@@ -8,6 +8,7 @@ import { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.
 import { RefreshIntegrationService } from '@gitroom/nestjs-libraries/integrations/refresh.integration.service';
 import { AuthService } from '@gitroom/helpers/auth/auth.service';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+import { isLocked, withLock } from '@gitroom/nestjs-libraries/redis/bolt.lock';
 import { X_INBOX_READS, X_INBOX_USAGE } from '@gitroom/nestjs-libraries/bolt-analytics/x.analytics';
 import { dayKey } from '@gitroom/nestjs-libraries/bolt-analytics/schedule';
 import { buildQuote, buildReply, buildRepost, InboxKind, NostrInbox } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.inbox';
@@ -56,9 +57,7 @@ export class InboxService {
   // ---------- sync ----------
 
   async syncAll(organizationId?: string, force = false) {
-    const locked = await ioRedis.set(LOCK_KEY, '1', 'EX', 1800, 'NX');
-    if (!locked) return false;
-    try {
+    const ran = await withLock(LOCK_KEY, async () => {
       const integrations = await this._prisma.integration.findMany({
         where: {
           deletedAt: null,
@@ -79,13 +78,12 @@ export class InboxService {
         }
       }
       return true;
-    } finally {
-      await ioRedis.del(LOCK_KEY);
-    }
+    });
+    return ran === true;
   }
 
   isRunning() {
-    return ioRedis.get(LOCK_KEY).then((v) => !!v);
+    return isLocked(LOCK_KEY);
   }
 
   cursor(integrationId: string) {
