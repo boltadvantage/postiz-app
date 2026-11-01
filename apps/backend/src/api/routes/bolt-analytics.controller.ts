@@ -86,4 +86,17 @@ export class BoltAnalyticsController {
     res.setHeader('Content-Disposition', `attachment; filename="postiz-analytics-${new Date().toISOString().slice(0, 10)}.csv"`);
     res.send(body);
   }
+
+  /** Daily follower totals per channel, for growth reports. */
+  @Get('/followers.csv')
+  async followersCsv(
+    @GetOrgFromRequest() org: Organization,
+    @Query('days') days: string | undefined,
+    @Res() res: Response
+  ) {
+    const body = await this._queries.followersCsv(org.id, clampDays(days, 365));
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="postiz-followers-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(body);
+  }
 }

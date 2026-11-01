@@ -32,3 +32,33 @@ describe('best times', () => {
     expect(r.recommended[0]).toEqual([]);
   });
 });
+
+describe('follower growth', () => {
+  const { followerGrowth } = jest.requireActual('./bolt-analytics.queries');
+  it('is last total minus first total in the period, ignoring missing days', () => {
+    const g = followerGrowth(
+      [
+        { date: '2026-09-30', followers: 10 }, // before the period
+        { date: '2026-10-02', followers: 100 },
+        { date: '2026-10-03', followers: null },
+        { date: '2026-10-09', followers: 112 },
+      ],
+      '2026-10-01'
+    );
+    expect(g).toMatchObject({ followers: 112, followersChange: 12, followersChangePct: 12, trackingSince: '2026-10-02' });
+    expect(g.followersDaily).toHaveLength(2);
+  });
+
+  it('a single day of data has a total but no change yet', () => {
+    expect(followerGrowth([{ date: '2026-11-01', followers: 50 }], '2026-10-01')).toMatchObject({
+      followers: 50,
+      followersChange: null,
+      followersChangePct: null,
+      trackingSince: '2026-11-01',
+    });
+  });
+
+  it('no data', () => {
+    expect(followerGrowth([], '2026-10-01').followers).toBeNull();
+  });
+});
