@@ -9,7 +9,7 @@ import { stripHtmlValidation } from '@gitroom/helpers/utils/strip.html.validatio
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 import { fromAnalyticsData, MetricMap, summarize } from '@gitroom/nestjs-libraries/bolt-analytics/metrics';
 import { BACKFILL_DAYS, STOP_AFTER_DAYS, byPriority, dayKey, isDue } from '@gitroom/nestjs-libraries/bolt-analytics/schedule';
-import { X_DAILY_READS, X_USER_READ_COST, XAnalytics } from '@gitroom/nestjs-libraries/bolt-analytics/x.analytics';
+import { X_HISTORY_READS, X_USER_READ_COST, XAnalytics } from '@gitroom/nestjs-libraries/bolt-analytics/x.analytics';
 import { NostrAnalytics } from '@gitroom/nestjs-libraries/bolt-analytics/nostr.analytics';
 import {
   FollowerTotal,
@@ -355,7 +355,7 @@ export class BoltAnalyticsService {
   }
 
   private async xBudgetLeft() {
-    return Math.max(0, X_DAILY_READS() - (await this.xReadsToday()));
+    return Math.max(0, X_HISTORY_READS() - (await this.xReadsToday()));
   }
 
   private addXReads(reads: number) {

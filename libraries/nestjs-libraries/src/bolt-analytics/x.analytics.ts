@@ -5,6 +5,13 @@ import type { MetricMap } from '@gitroom/nestjs-libraries/bolt-analytics/metrics
 
 // $1/day ≈ 200 post reads. Override with BOLT_X_DAILY_READS.
 export const X_DAILY_READS = () => Math.max(0, Number(process.env.BOLT_X_DAILY_READS ?? 200));
+// The inbox's own share of that cap (mentions + DMs), counted separately so a
+// History backfill can never starve it. Override with BOLT_X_INBOX_READS.
+export const X_INBOX_READS = () => Math.min(X_DAILY_READS(), Math.max(0, Number(process.env.BOLT_X_INBOX_READS ?? 50)));
+// History gets the rest
+export const X_HISTORY_READS = () => X_DAILY_READS() - X_INBOX_READS();
+/** Usage rows: History counts under "x", the inbox under "x-inbox". */
+export const X_INBOX_USAGE = 'x-inbox';
 export const X_USER_READ_COST = 2; // a user lookup costs about two post reads
 
 const FIELDS = ['public_metrics', 'created_at'] as const;
