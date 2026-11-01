@@ -286,7 +286,12 @@ export const useMenuItem = () => {
   ] satisfies MenuItemInterface[] as MenuItemInterface[];
 
   return {
-    all: [...firstMenu, ...secondMenu],
+    all: [
+      ...firstMenu,
+      ...secondMenu,
+      // Bolt Advantage: pages reached from another page, listed only for the page title
+      { name: t('client_costs', 'Client costs'), icon: null, path: '/costs', hide: true },
+    ],
     firstMenu,
     secondMenu,
   };
