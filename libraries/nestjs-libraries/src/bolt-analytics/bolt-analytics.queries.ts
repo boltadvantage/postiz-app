@@ -39,28 +39,41 @@ export const SHRINK_POSTS = 5;
  * Average engagement per weekday x hour, and the best hours per weekday.
  * A slot needs at least `minPosts` posts before it can be recommended.
  */
+// Recent posts count more: a post's weight halves every 30 days, so a post from
+// this week counts ~4x one from two months ago. Trends show up without
+// throwing away the older posts that make each weekday x hour slot reliable.
+export const HALF_LIFE_DAYS = 30;
+
 export function bestTimes(
   posts: Array<{ publishedAt: Date; engagement: number }>,
   timeZone: string,
   minPosts = 2,
-  perDay = 3
+  perDay = 3,
+  now = new Date()
 ) {
-  const cells = new Map<string, { weekday: number; hour: number; posts: number; total: number }>();
+  const weightOf = (d: Date) => Math.pow(0.5, Math.max(0, now.getTime() - d.getTime()) / 86400000 / HALF_LIFE_DAYS);
+  const cells = new Map<string, { weekday: number; hour: number; posts: number; w: number; total: number }>();
+  let wSum = 0;
+  let eSum = 0;
   for (const p of posts) {
     const { weekday, hour } = localSlot(p.publishedAt, timeZone);
+    const w = weightOf(p.publishedAt);
     const key = `${weekday}:${hour}`;
-    const c = cells.get(key) || { weekday, hour, posts: 0, total: 0 };
+    const c = cells.get(key) || { weekday, hour, posts: 0, w: 0, total: 0 };
     c.posts += 1;
-    c.total += p.engagement;
+    c.w += w;
+    c.total += w * p.engagement;
     cells.set(key, c);
+    wSum += w;
+    eSum += w * p.engagement;
   }
-  const overall = posts.length ? posts.reduce((s, p) => s + p.engagement, 0) / posts.length : 0;
+  const overall = wSum ? eSum / wSum : 0;
   const grid: SlotStat[] = [...cells.values()].map((c) => ({
     weekday: c.weekday,
     hour: c.hour,
     posts: c.posts,
-    avgEngagement: Math.round((c.total / c.posts) * 10) / 10,
-    score: Math.round(((c.total + SHRINK_POSTS * overall) / (c.posts + SHRINK_POSTS)) * 10) / 10,
+    avgEngagement: Math.round((c.total / c.w) * 10) / 10,
+    score: Math.round(((c.total + SHRINK_POSTS * overall) / (c.w + SHRINK_POSTS)) * 10) / 10,
   }));
   const recommended = WEEKDAYS.map((_, weekday) =>
     grid

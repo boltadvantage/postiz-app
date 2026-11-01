@@ -2,14 +2,24 @@
 import { Injectable } from '@nestjs/common';
 import { Activity, ActivityMethod } from 'nestjs-temporal-core';
 import { InboxService } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
+import { QueueService } from '@gitroom/nestjs-libraries/bolt-queue/queue.service';
 
 @Injectable()
 @Activity()
 export class BoltInboxActivity {
-  constructor(private _inbox: InboxService) {}
+  constructor(
+    private _inbox: InboxService,
+    private _queue: QueueService
+  ) {}
 
   @ActivityMethod()
   async syncBoltInbox() {
     await this._inbox.syncAll();
+  }
+
+  /** Sunday-morning refresh of queues set to keep their times updated. */
+  @ActivityMethod()
+  async adjustBoltQueues() {
+    await this._queue.adjustDue();
   }
 }

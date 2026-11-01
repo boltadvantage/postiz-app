@@ -27,7 +27,11 @@ describe('best times', () => {
     ];
     const r = bestTimes(posts, 'America/Chicago');
     expect(r.recommended[1]).toEqual([8, 12]);
-    expect(r.grid.find((g) => g.weekday === 1 && g.hour === 8)).toMatchObject({ weekday: 1, hour: 8, posts: 2, avgEngagement: 20 });
+    const monday8 = r.grid.find((g) => g.weekday === 1 && g.hour === 8)!;
+    expect(monday8).toMatchObject({ weekday: 1, hour: 8, posts: 2 });
+    // 10 and 30 a week apart: weighted toward the newer 10, so a bit under 20
+    expect(monday8.avgEngagement).toBeGreaterThan(15);
+    expect(monday8.avgEngagement).toBeLessThan(20);
     expect(r.sampleSize).toBe(5);
     expect(r.recommended[0]).toEqual([]);
   });
@@ -60,5 +64,19 @@ describe('follower growth', () => {
 
   it('no data', () => {
     expect(followerGrowth([], '2026-10-01').followers).toBeNull();
+  });
+});
+
+describe('best times recency', () => {
+  it('weights recent posts more (30-day half-life)', () => {
+    const now = new Date('2026-11-02T18:00:00Z');
+    const at = (daysAgo: number, engagement: number) => ({ publishedAt: new Date(now.getTime() - daysAgo * 86400000), engagement });
+    // same Monday-noon slot (Chicago): an old big post and a recent small one
+    const r = bestTimes([at(63, 100), at(7, 10)], 'America/Chicago', 2, 3, now);
+    const cell = r.grid[0];
+    // unweighted would be 55; weighted leans toward the recent 10
+    expect(cell.avgEngagement).toBeLessThan(40);
+    expect(cell.avgEngagement).toBeGreaterThan(10);
+    expect(cell.posts).toBe(2);
   });
 });

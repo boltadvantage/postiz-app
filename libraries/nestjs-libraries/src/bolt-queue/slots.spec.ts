@@ -66,3 +66,56 @@ describe('queue slots', () => {
     expect(slotLabel(810)).toBe('1:30 PM');
   });
 });
+
+import { normalizeDaysOff, normalizePerDay, pickDayTimes } from './slots';
+
+describe('queue v2', () => {
+  it('skips days off but keeps the rest of the week', () => {
+    // Christmas 2026 is a Friday
+    const out = nextSlots({
+      slots: [{ day: 4, minute: 540 }, { day: 5, minute: 540 }, { day: 6, minute: 540 }],
+      timeZone: TZ,
+      from: new Date('2026-12-23T12:00:00Z'),
+      count: 3,
+      daysOff: new Set(['2026-12-25']),
+    });
+    expect(out.map((d) => d.toISOString().slice(0, 10))).toEqual(['2026-12-24', '2026-12-26', '2026-12-31']);
+  });
+
+  it('picks the best n hours, spaced apart, and fills with defaults when history is thin', () => {
+    const cells = [
+      { hour: 9, posts: 6, score: 40 },
+      { hour: 10, posts: 5, score: 38 }, // too close to 9
+      { hour: 13, posts: 4, score: 30 },
+      { hour: 20, posts: 1, score: 90 }, // one post: not enough
+      { hour: 7, posts: 5, score: 5 }, // below average
+    ];
+    const three = pickDayTimes(1, cells, 3, 20);
+    expect(three).toEqual([
+      { day: 1, minute: 540, source: 'data' },
+      { day: 1, minute: 780, source: 'data' },
+      { day: 1, minute: 900, source: 'filler' }, // 15:00, first filler 2h+ from both
+    ]);
+    expect(pickDayTimes(1, cells, 0, 20)).toEqual([]);
+    expect(pickDayTimes(1, [], 2, 20).every((s) => s.source === 'filler')).toBe(true);
+  });
+
+  it('can fit a busy day by relaxing the spacing, capped at 12', () => {
+    const busy = pickDayTimes(2, [], 12, 0);
+    expect(busy).toHaveLength(12);
+    expect(new Set(busy.map((s) => s.minute)).size).toBe(12);
+    expect(pickDayTimes(2, [], 50, 0)).toHaveLength(12);
+  });
+
+  it('cleans per-day counts and days off', () => {
+    expect(normalizePerDay({ 1: 3, 2: '1', 7: 4, 3: -1, 4: 99, x: 2 })).toEqual({ 1: 3, 2: 1, 4: 12 });
+    expect(normalizeDaysOff(['2099-12-25', '2099-12-25', 'nope', '2000-01-01', '2099-02-30x'])).toEqual(['2099-12-25']);
+  });
+
+  it('keeps where a slot came from', () => {
+    expect(normalizeSlots([{ day: 1, minute: 60, source: 'data' }, { day: 1, minute: 120, source: 'bogus' }])).toEqual([
+      { day: 1, minute: 60, source: 'data' },
+      { day: 1, minute: 120 },
+    ]);
+  });
+});
