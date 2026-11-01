@@ -116,7 +116,22 @@ export class ThirdPartyController {
       throw new HttpException('Invalid identifier', 400);
     }
 
-    return thirdPartyInstance?.instance?.[functionName](
+    // Bolt Advantage: only the integration's own methods may be called by
+    // name, never inherited ones (Object.prototype, the abstract base) or
+    // private helpers; the call also receives the decrypted API key.
+    const instance = thirdPartyInstance.instance;
+    const proto = instance && Object.getPrototypeOf(instance);
+    const callable =
+      !!proto &&
+      functionName !== 'constructor' &&
+      !functionName.startsWith('_') &&
+      Object.prototype.hasOwnProperty.call(proto, functionName) &&
+      typeof proto[functionName] === 'function';
+    if (!callable) {
+      throw new HttpException('Function not found', 400);
+    }
+
+    return instance[functionName](
       AuthService.fixedDecryption(thirdParty.apiKey),
       data
     );
