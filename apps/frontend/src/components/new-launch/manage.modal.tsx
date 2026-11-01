@@ -66,6 +66,7 @@ import { useShortlinkPreference } from '@gitroom/frontend/components/settings/sh
 import dayjs from 'dayjs';
 import { Button } from '@gitroom/react/form/button';
 import { useClickOutside } from '@mantine/hooks';
+import { fromUtc } from '@gitroom/frontend/components/layout/set.timezone';
 import {
   MediaSettingsSection,
   useMediaSettingsValues,
@@ -85,6 +86,9 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
     'channels' | 'settings' | 'tags' | 'repeat' | 'date' | null
   >(null);
   const [showPostNow, setShowPostNow] = useState(false);
+  // Bolt Advantage: set by "Add to queue" once each channel has its slot
+  const [queueReady, setQueueReady] = useState(false);
+  const [queueLoading, setQueueLoading] = useState(false);
   const postNowRef = useClickOutside<HTMLDivElement>(() => {
     setShowPostNow(false);
   });
@@ -823,6 +827,47 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
     ]
   );
 
+  // Bolt Advantage: give every selected channel its own next free queue time,
+  // then schedule normally once the store has the per-channel dates.
+  const addToQueue = useCallback(async () => {
+    setQueueLoading(true);
+    try {
+      const picks = await Promise.all(
+        selectedIntegrations.map(async (p) => {
+          const res = await fetch(`/queue/${p.integration.id}/next?count=1`);
+          const { dates } = res.ok ? await res.json() : { dates: [] };
+          return { integration: p.integration, date: dates?.[0] as string | undefined };
+        })
+      );
+      const missing = picks.filter((p) => !p.date);
+      if (missing.length) {
+        toaster.show(
+          t(
+            'queue_missing_times',
+            'No queue times for {{names}}. Set them on the Queue page, or pick a date.',
+            { names: missing.map((m) => m.integration.name).join(', ') }
+          ),
+          'warning'
+        );
+        return;
+      }
+      for (const p of picks) {
+        setChannelDate(p.integration.id, fromUtc(p.date));
+      }
+      setQueueReady(true);
+    } finally {
+      setQueueLoading(false);
+    }
+  }, [selectedIntegrations, setChannelDate]);
+
+  useEffect(() => {
+    if (!queueReady) {
+      return;
+    }
+    setQueueReady(false);
+    schedule('schedule')();
+  }, [queueReady, channelDates]);
+
   const scheduleLabel = dummy
     ? t('create_output', 'Create output')
     : !existingData?.integration
@@ -1168,6 +1213,28 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                 onClick={schedule('draft')}
               >
                 Save Set
+              </button>
+            )}
+            {!addEditSets && !dummy && !existingData?.integration && (
+              <button
+                disabled={
+                  selectedIntegrations.length === 0 || loading || locked || queueLoading
+                }
+                onClick={addToQueue}
+                title={t(
+                  'add_to_queue_hint',
+                  'Each channel gets its own next open time from its queue'
+                )}
+                className="relative cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 px-[20px] h-[44px] bg-btnSimple justify-center items-center flex rounded-[8px] text-[15px] font-[600] whitespace-nowrap"
+              >
+                {queueLoading && (
+                  <div className="absolute left-[50%] top-[50%] -translate-y-[50%] -translate-x-[50%]">
+                    <div className="animate-spin h-[20px] w-[20px] border-4 border-textColor border-t-transparent rounded-full" />
+                  </div>
+                )}
+                <div className={clsx(queueLoading && 'invisible')}>
+                  {t('add_to_queue', 'Add to queue')}
+                </div>
               </button>
             )}
             {!addEditSets && (
