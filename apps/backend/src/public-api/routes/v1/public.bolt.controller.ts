@@ -116,6 +116,13 @@ export class PublicBoltController {
     return wrap(() => this._api.updateQueue(org.id, integrationId, body || {}));
   }
 
+  // ---------- client costs ----------
+
+  @Get('/costs')
+  costs(@GetOrgFromRequest() org: Organization, @Query('from') from?: string, @Query('to') to?: string) {
+    return wrap(() => this._api.costs(org.id, from, to));
+  }
+
   // ---------- saved analytics ----------
 
   @Get('/analytics')

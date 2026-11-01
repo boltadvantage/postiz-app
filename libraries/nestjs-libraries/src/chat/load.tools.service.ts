@@ -86,6 +86,7 @@ export class LoadToolsService {
         - Tag, note or mute people in the inbox privately (boltPeopleTool)
         - See and change each channel's posting queue, and pause or resume all posting (boltQueueTool, boltQueueUpdateTool, boltPostingPauseTool)
         - Report saved analytics, real follower totals and best posting times (boltAnalyticsTool)
+        - Report what each client cost in metered API use over a date range, for invoicing (boltCostsTool)
 
       - We schedule posts to different integration like facebook, instagram, etc. but to the user we don't say integrations we say channels as integration is the technical name
       - When scheduling a post, you must follow the social media rules and best practices.

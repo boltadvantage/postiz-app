@@ -167,7 +167,7 @@ export class DmService {
         budget,
         oldest: state?.cursor ? dayjs().subtract(30, 'day').toDate() : dayjs().subtract(FIRST_RUN_DAYS, 'day').toDate(),
       });
-      await this._inbox.addUsage(X_INBOX_USAGE, res.reads);
+      await this._inbox.addUsage(X_INBOX_USAGE, res.reads, { integration, kind: 'dm' });
       await this.store(
         integration,
         res.messages.map((m) => ({ externalId: m.id, peer: m.peer, direction: m.direction, text: m.text, sentAt: m.createdAt, protocol: null })),
@@ -177,7 +177,7 @@ export class DmService {
       await this._inbox.saveCursor(cursorId, { cursor: newest, error: null });
     } catch (err: any) {
       if (isDmPermissionError(err)) {
-        await this._inbox.addUsage(X_INBOX_USAGE, 1);
+        await this._inbox.addUsage(X_INBOX_USAGE, 1, { integration, kind: 'dm' });
         await this._inbox.saveCursor(cursorId, { cursor: state?.cursor || null, error: X_DM_PERMISSION });
         return;
       }
@@ -333,7 +333,7 @@ export class DmService {
         if (isDmPermissionError(err)) throw new Error(X_DM_PERMISSION);
         throw err;
       }
-      await this._inbox.addUsage('x-write', 1);
+      await this._inbox.addUsage('x-write', 1, { integration, kind: 'write' });
     } else {
       throw new Error('This channel does not support messages yet');
     }

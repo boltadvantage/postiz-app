@@ -9,6 +9,7 @@ import { stripHtmlValidation } from '@gitroom/helpers/utils/strip.html.validatio
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 import { fromAnalyticsData, MetricMap, summarize } from '@gitroom/nestjs-libraries/bolt-analytics/metrics';
 import { BACKFILL_DAYS, STOP_AFTER_DAYS, byPriority, dayKey, isDue } from '@gitroom/nestjs-libraries/bolt-analytics/schedule';
+import { recordChannelUsage } from '@gitroom/nestjs-libraries/bolt-costs/usage';
 import { X_HISTORY_READS, X_USER_READ_COST, XAnalytics } from '@gitroom/nestjs-libraries/bolt-analytics/x.analytics';
 import { NostrAnalytics } from '@gitroom/nestjs-libraries/bolt-analytics/nostr.analytics';
 import {
@@ -166,7 +167,7 @@ export class BoltAnalyticsService {
           return; // continue tomorrow, cursor saved
         }
         const page = await x.timelinePage(integration.internalId, since, budget, cursor);
-        await this.addXReads(Math.max(page.posts.length, 1));
+        await this.addXReads(Math.max(page.posts.length, 1), integration);
         for (const p of page.posts) {
           const row = await this.upsertImported(integration, p.id, p.createdAt, `https://x.com/i/status/${p.id}`, p.text);
           await this.save(row.id, p.metrics);
@@ -223,7 +224,7 @@ export class BoltAnalyticsService {
           return;
         }
         const metrics = await new XAnalytics(token).lookup(batch.map((b) => b.externalId));
-        await this.addXReads(batch.length);
+        await this.addXReads(batch.length, integration);
         for (const b of batch) {
           if (metrics[b.externalId]) {
             await this.save(b.id, metrics[b.externalId]);
@@ -313,7 +314,7 @@ export class BoltAnalyticsService {
         if ((await this.xBudgetLeft()) < X_USER_READ_COST) {
           return 'skip';
         }
-        await this.addXReads(X_USER_READ_COST);
+        await this.addXReads(X_USER_READ_COST, integration);
         return { followers: await new XAnalytics(token).followers() };
       }
       case 'nostr':
@@ -358,7 +359,8 @@ export class BoltAnalyticsService {
     return Math.max(0, X_HISTORY_READS() - (await this.xReadsToday()));
   }
 
-  private addXReads(reads: number) {
+  private async addXReads(reads: number, integration: Integration) {
+    await recordChannelUsage(this._prisma, integration, 'history', reads);
     return this._prisma.analyticsApiUsage.upsert({
       where: { provider_date: { provider: 'x', date: dayKey() } },
       create: { provider: 'x', date: dayKey(), reads },
