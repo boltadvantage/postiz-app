@@ -11,6 +11,13 @@ import { fromAnalyticsData, MetricMap, summarize } from '@gitroom/nestjs-librari
 import { BACKFILL_DAYS, STOP_AFTER_DAYS, byPriority, dayKey, isDue } from '@gitroom/nestjs-libraries/bolt-analytics/schedule';
 import { X_DAILY_READS, X_USER_READ_COST, XAnalytics } from '@gitroom/nestjs-libraries/bolt-analytics/x.analytics';
 import { NostrAnalytics } from '@gitroom/nestjs-libraries/bolt-analytics/nostr.analytics';
+import {
+  FollowerTotal,
+  facebookFollowers,
+  instagramFollowers,
+  linkedinPageFollowers,
+  nostrFollowers,
+} from '@gitroom/nestjs-libraries/bolt-analytics/followers';
 
 export const SUPPORTED_PROVIDERS = ['x', 'nostr', 'linkedin', 'linkedin-page', 'facebook', 'instagram', 'instagram-standalone'];
 // Channels whose past posts we import from the platform (others: posts made in Postiz only).
@@ -254,33 +261,42 @@ export class BoltAnalyticsService {
     }
   }
 
-  /** Followers and channel-level totals, once per channel per day. */
+  /**
+   * The real follower total and channel-level metrics, once per channel per day.
+   * Followers always come from the platform's own total, never from its daily
+   * "new followers" metric. A day whose total failed is retried on the next pass.
+   */
   private async channelDaily(integration: Integration, token: string) {
     const date = dayKey();
     const existing = await this._prisma.analyticsChannelDaily.findUnique({
       where: { integrationId_date: { integrationId: integration.id, date } },
     });
-    if (existing) {
+    if (existing && existing.followers != null) {
       return;
     }
 
-    let followers: number | null = null;
-    let metrics: MetricMap = {};
-    if (integration.providerIdentifier === 'x') {
-      if ((await this.xBudgetLeft()) < X_USER_READ_COST) {
-        return;
-      }
-      followers = await new XAnalytics(token).followers();
-      await this.addXReads(X_USER_READ_COST);
-    } else if (integration.providerIdentifier !== 'nostr') {
+    let metrics: MetricMap = existing ? JSON.parse(existing.metrics || '{}') : {};
+    if (!existing && !['x', 'nostr'].includes(integration.providerIdentifier)) {
       const provider = this._integrationManager.getSocialIntegration(integration.providerIdentifier);
-      if (!provider?.analytics) {
+      if (provider?.analytics) {
+        try {
+          metrics = fromAnalyticsData(await provider.analytics(integration.internalId, token, 1));
+        } catch (err: any) {
+          this._logger.warn(`${integration.providerIdentifier} channel metrics: ${err?.message || err}`);
+        }
+      }
+    }
+
+    let followers: number | null = null;
+    try {
+      const total = await this.followerTotal(integration, token);
+      if (total === 'skip') {
         return;
       }
-      metrics = fromAnalyticsData(await provider.analytics(integration.internalId, token, 1));
-      followers = metrics.followers ?? metrics.page_followers ?? metrics.followers_count ?? null;
-    } else {
-      return;
+      followers = total.followers;
+      metrics = { ...metrics, ...(total.extra || {}) };
+    } catch (err: any) {
+      this._logger.warn(`${integration.providerIdentifier} followers: ${err?.message || err}`);
     }
 
     await this._prisma.analyticsChannelDaily.upsert({
@@ -288,6 +304,32 @@ export class BoltAnalyticsService {
       create: { integrationId: integration.id, organizationId: integration.organizationId, date, followers, metrics: JSON.stringify(metrics) },
       update: { followers, metrics: JSON.stringify(metrics) },
     });
+  }
+
+  /** 'skip' leaves the day open (X out of budget) so a later pass fills it. */
+  private async followerTotal(integration: Integration, token: string): Promise<FollowerTotal | 'skip'> {
+    switch (integration.providerIdentifier) {
+      case 'x': {
+        if ((await this.xBudgetLeft()) < X_USER_READ_COST) {
+          return 'skip';
+        }
+        await this.addXReads(X_USER_READ_COST);
+        return { followers: await new XAnalytics(token).followers() };
+      }
+      case 'nostr':
+        return nostrFollowers(integration.internalId);
+      case 'facebook':
+        return facebookFollowers(integration.internalId, token);
+      case 'instagram':
+        return instagramFollowers(integration.internalId, token, 'graph.facebook.com');
+      case 'instagram-standalone':
+        return instagramFollowers(integration.internalId, token, 'graph.instagram.com');
+      case 'linkedin-page':
+        return linkedinPageFollowers(integration.internalId, token);
+      default:
+        // personal LinkedIn: see followers.ts
+        return { followers: null };
+    }
   }
 
   private async save(analyticsPostId: string, metrics: MetricMap | undefined) {

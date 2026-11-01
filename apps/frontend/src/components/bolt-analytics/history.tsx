@@ -24,6 +24,9 @@ type Summary = {
   previous: { posts: number; impressions: number; engagement: number };
   followers: number | null;
   followersChange: number | null;
+  followersChangePct: number | null;
+  trackingSince: string | null;
+  followersDaily: { date: string; followers: number }[];
   synced: number;
   daily: { date: string; posts: number; engagement: number; impressions: number }[];
 };
@@ -67,6 +70,25 @@ const Change: FC<{ now: number; before: number }> = ({ now, before }) => {
     <span className={clsx('text-[12px] ms-[6px]', pct >= 0 ? 'text-green-400' : 'text-red-400')}>
       {pct >= 0 ? '▲' : '▼'} {Math.abs(pct)}%
     </span>
+  );
+};
+
+// Bolt Advantage: follower totals over the period (real totals, one point per day)
+const FollowerLine: FC<{ points: Summary['followersDaily'] }> = ({ points }) => {
+  if (points.length < 2) return null;
+  const values = points.map((p) => p.followers);
+  const min = Math.min(...values);
+  const span = Math.max(1, Math.max(...values) - min);
+  const coords = points
+    .map((p, i) => `${(i / (points.length - 1)) * 100},${28 - ((p.followers - min) / span) * 24}`)
+    .join(' ');
+  const first = points[0];
+  const last = points[points.length - 1];
+  return (
+    <svg viewBox="0 0 100 30" preserveAspectRatio="none" className="w-full h-[30px]" aria-hidden>
+      <title>{`${dayjs(first.date).format('MMM D')}: ${first.followers.toLocaleString()} → ${dayjs(last.date).format('MMM D')}: ${last.followers.toLocaleString()}`}</title>
+      <polyline points={coords} fill="none" stroke={last.followers >= first.followers ? '#4ade80' : '#f87171'} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+    </svg>
   );
 };
 
@@ -212,6 +234,12 @@ export const History = () => {
           {status?.running ? t('syncing', 'Syncing…') : t('sync_now', 'Sync now')}
         </button>
         <a
+          href={`${backendUrl}/bolt-analytics/followers.csv?days=365`}
+          className="px-[14px] h-[34px] rounded-[8px] border border-newTableBorder text-[14px] flex items-center whitespace-nowrap"
+        >
+          {t('download_followers_csv', 'Download followers CSV')}
+        </a>
+        <a
           href={`${backendUrl}/bolt-analytics/export.csv?days=${days}`}
           className="px-[14px] h-[34px] rounded-[8px] bg-[#612BD3] text-white text-[14px] flex items-center whitespace-nowrap"
         >
@@ -287,16 +315,28 @@ export const History = () => {
                 <div>
                   <div className="text-textItemBlur">{t('followers', 'Followers')}</div>
                   <div className="text-[18px]">
-                    {num(s.followers)}
-                    {!!s.followersChange && (
-                      <span className={clsx('text-[12px] ms-[6px]', s.followersChange > 0 ? 'text-green-400' : 'text-red-400')}>
+                    {s.followers == null ? '—' : s.followers.toLocaleString()}
+                    {s.followersChange != null && (
+                      <span
+                        className={clsx(
+                          'text-[12px] ms-[6px]',
+                          s.followersChange > 0 ? 'text-green-400' : s.followersChange < 0 ? 'text-red-400' : 'text-textItemBlur'
+                        )}
+                      >
                         {s.followersChange > 0 ? '+' : ''}
-                        {s.followersChange}
+                        {s.followersChange.toLocaleString()}
+                        {s.followersChangePct != null ? ` (${s.followersChangePct > 0 ? '+' : ''}${s.followersChangePct}%)` : ''}
                       </span>
                     )}
                   </div>
+                  {s.followers != null && s.followersChange == null && s.trackingSince && (
+                    <div className="text-[11px] text-textItemBlur">
+                      {t('tracking_since', 'Tracking since {{date}}', { date: dayjs(s.trackingSince).format('MMM D') })}
+                    </div>
+                  )}
                 </div>
               </div>
+              <FollowerLine points={s.followersDaily} />
               <Bars daily={s.daily} days={days} />
             </button>
           ))}
