@@ -240,7 +240,13 @@ export class AuthService {
       id: string;
       expires: string;
     };
-    if (typeof user.id !== 'string' || dayjs(user.expires).isBefore(dayjs())) {
+    // Bolt Advantage: require the reset link's own expiry claim, so a session
+    // token or 2FA login challenge can't be replayed here as a reset token.
+    if (
+      typeof user.id !== 'string' ||
+      !user.expires ||
+      dayjs(user.expires).isBefore(dayjs())
+    ) {
       return false;
     }
 
@@ -327,6 +333,16 @@ export class AuthService {
     }
 
     return { token };
+  }
+
+  /** Session token for a user who has passed two-factor (marked mfa: true). */
+  async jwtAfterTwoFactor(userId: string) {
+    const user = await this._userService.getUserById(userId);
+    if (!user || !user.activated) {
+      throw new Error('Invalid user');
+    }
+    delete user.password;
+    return AuthChecker.signJWT({ ...user, mfa: true });
   }
 
   private async jwt(user: User) {

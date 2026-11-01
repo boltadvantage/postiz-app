@@ -16,6 +16,7 @@ import { useVariables } from '@gitroom/react/helpers/variable.context';
 import { FarcasterProvider } from '@gitroom/frontend/components/auth/providers/farcaster.provider';
 import WalletProvider from '@gitroom/frontend/components/auth/providers/wallet.provider';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { TwoFactorLogin } from '@gitroom/frontend/components/auth/two.factor.login';
 type Inputs = {
   email: string;
   password: string;
@@ -26,6 +27,7 @@ export function Login() {
   const t = useT();
   const [loading, setLoading] = useState(false);
   const [notActivated, setNotActivated] = useState(false);
+  const [challenge, setChallenge] = useState('');
   const {
     isGeneral,
     neynarClientId,
@@ -54,6 +56,14 @@ export function Login() {
         provider: 'LOCAL',
       }),
     });
+    if (login.status === 200) {
+      const body = await login.json().catch(() => ({}));
+      if (body?.twoFactor && body.challenge) {
+        setChallenge(body.challenge);
+        setLoading(false);
+        return;
+      }
+    }
     if (login.status === 400) {
       const errorMessage = await login.text();
       if (errorMessage === 'User is not activated') {
@@ -66,6 +76,11 @@ export function Login() {
       setLoading(false);
     }
   };
+  if (challenge) {
+    return (
+      <TwoFactorLogin challenge={challenge} onCancel={() => setChallenge('')} />
+    );
+  }
   return (
     <FormProvider {...form}>
       <form className="flex-1 flex" onSubmit={form.handleSubmit(onSubmit)}>

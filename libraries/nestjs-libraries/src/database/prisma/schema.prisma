@@ -118,6 +118,7 @@ model User {
   sendFailureEmails     Boolean              @default(true)
   sendStreakEmails      Boolean              @default(true)
   oauthAuthorizations   OAuthAuthorization[]
+  twoFactor             UserTwoFactor?
 
   @@unique([email, providerName])
   @@index([lastReadNotifications])
@@ -126,6 +127,19 @@ model User {
   @@index([lastOnline])
   @@index([pictureId])
   @@index([deletedAt])
+}
+
+/// Bolt Advantage: authenticator-app (TOTP) sign-in. Kept out of User so the
+/// secret never lands in a JWT or a /user/self response.
+model UserTwoFactor {
+  userId        String    @id
+  secret        String
+  enabledAt     DateTime?
+  lastUsedStep  Int?
+  recoveryCodes String    @default("[]")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model UsedCodes {

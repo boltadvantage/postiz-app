@@ -28,13 +28,21 @@ import { Provider } from '@prisma/client';
 import { makeSecureId } from '@gitroom/nestjs-libraries/services/make.secure.id';
 import * as Sentry from '@sentry/nestjs';
 import { FarcasterProvider } from '@gitroom/nestjs-libraries/integrations/social/farcaster.provider';
+import { TwoFactorService } from '@gitroom/nestjs-libraries/database/prisma/two-factor/two-factor.service';
+import {
+  issueTwoFactorChallenge,
+  readTwoFactorChallenge,
+  setAuthCookie,
+  userIdFromJwt,
+} from '@gitroom/backend/services/auth/two.factor.session';
 
 @ApiTags('Auth')
 @Controller('/auth')
 export class AuthController {
   constructor(
     private _authService: AuthService,
-    private _emailService: EmailService
+    private _emailService: EmailService,
+    private _twoFactorService: TwoFactorService
   ) {}
 
   @Get('/can-register')
@@ -139,6 +147,16 @@ export class AuthController {
         getOrgFromCookie
       );
 
+      // Bolt Advantage: password was right; hold the session until the code step.
+      const userId = userIdFromJwt(jwt);
+      if (await this._twoFactorService.isEnabled(userId)) {
+        response.status(200).json({
+          twoFactor: true,
+          challenge: issueTwoFactorChallenge(userId),
+        });
+        return;
+      }
+
       response.cookie('auth', jwt, {
         domain: getCookieUrlFromDomain(process.env.FRONTEND_URL!),
         ...(!process.env.NOT_SECURED
@@ -180,6 +198,31 @@ export class AuthController {
     } catch (e: any) {
       response.status(400).send(e.message);
     }
+  }
+
+  // Bolt Advantage: second login step for accounts with an authenticator app.
+  @UseGuards(ThrottlerRealIpGuard)
+  @Throttle({ default: { limit: 10, ttl: 15 * 60 * 1000 } })
+  @Post('/login/2fa')
+  async loginTwoFactor(
+    @Body('challenge') challenge: string,
+    @Body('code') code: string,
+    @Res({ passthrough: false }) response: Response
+  ) {
+    const userId = readTwoFactorChallenge(challenge);
+    if (!userId) {
+      return response
+        .status(400)
+        .send('Your sign-in expired. Enter your email and password again.');
+    }
+
+    if (!(await this._twoFactorService.verify(userId, String(code || '')))) {
+      return response.status(400).send('That code is not valid');
+    }
+
+    setAuthCookie(response, await this._authService.jwtAfterTwoFactor(userId));
+    response.header('reload', 'true');
+    return response.status(200).json({ login: true });
   }
 
   @Post('/forgot')
@@ -358,6 +401,14 @@ export class AuthController {
 
     if (token) {
       return response.json({ token });
+    }
+
+    const userId = userIdFromJwt(jwt);
+    if (await this._twoFactorService.isEnabled(userId)) {
+      return response.status(200).json({
+        twoFactor: true,
+        challenge: issueTwoFactorChallenge(userId),
+      });
     }
 
     response.cookie('auth', jwt, {

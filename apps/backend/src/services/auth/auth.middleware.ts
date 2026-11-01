@@ -4,6 +4,7 @@ import { AuthService } from '@gitroom/helpers/auth/auth.service';
 import { User } from '@prisma/client';
 import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
 import { UsersService } from '@gitroom/nestjs-libraries/database/prisma/users/users.service';
+import { TwoFactorService } from '@gitroom/nestjs-libraries/database/prisma/two-factor/two-factor.service';
 import { getCookieUrlFromDomain } from '@gitroom/helpers/subdomain/subdomain.management';
 import { HttpForbiddenException } from '@gitroom/nestjs-libraries/services/exception.filter';
 import { MastraService } from '@gitroom/nestjs-libraries/chat/mastra.service';
@@ -29,7 +30,8 @@ export const removeAuth = (res: Response) => {
 export class AuthMiddleware implements NestMiddleware {
   constructor(
     private _organizationService: OrganizationService,
-    private _userService: UsersService
+    private _userService: UsersService,
+    private _twoFactorService: TwoFactorService
   ) {}
   async use(req: Request, res: Response, next: NextFunction) {
     const auth = req.headers.auth || req.cookies.auth;
@@ -54,6 +56,20 @@ export class AuthMiddleware implements NestMiddleware {
       }
 
       if (!user.activated) {
+        throw new HttpForbiddenException();
+      }
+
+      // Bolt Advantage: a login challenge is not a session, and once 2FA is
+      // on only sessions that passed the code step count.
+      const claims = payload as unknown as { purpose?: string; mfa?: boolean };
+      if (claims.purpose) {
+        throw new HttpForbiddenException();
+      }
+      if (
+        claims.mfa !== true &&
+        (await this._twoFactorService.isEnabled(user.id))
+      ) {
+        removeAuth(res);
         throw new HttpForbiddenException();
       }
 
