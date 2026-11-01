@@ -8,7 +8,7 @@ import { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.
 import { RefreshIntegrationService } from '@gitroom/nestjs-libraries/integrations/refresh.integration.service';
 import { AuthService } from '@gitroom/helpers/auth/auth.service';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
-import { X_DAILY_READS } from '@gitroom/nestjs-libraries/bolt-analytics/x.analytics';
+import { X_INBOX_READS, X_INBOX_USAGE } from '@gitroom/nestjs-libraries/bolt-analytics/x.analytics';
 import { dayKey } from '@gitroom/nestjs-libraries/bolt-analytics/schedule';
 import { buildQuote, buildReply, buildRepost, InboxKind, NostrInbox } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.inbox';
 import { XInbox } from '@gitroom/nestjs-libraries/bolt-inbox/x.inbox';
@@ -163,8 +163,8 @@ export class InboxService {
   }
 
   private async xBudgetLeft() {
-    const row = await this._prisma.analyticsApiUsage.findUnique({ where: { provider_date: { provider: 'x', date: dayKey() } } });
-    return Math.max(0, X_DAILY_READS() - (row?.reads || 0));
+    const row = await this._prisma.analyticsApiUsage.findUnique({ where: { provider_date: { provider: X_INBOX_USAGE, date: dayKey() } } });
+    return Math.max(0, X_INBOX_READS() - (row?.reads || 0));
   }
 
   private addUsage(provider: string, n: number) {
@@ -186,14 +186,14 @@ export class InboxService {
     const state = await this.cursor(integration.id);
     if (!force && state?.lastRunAt && dayjs().diff(state.lastRunAt, 'minute') < X_MIN_INTERVAL_MIN) return;
     const budget = await this.xBudgetLeft();
-    if (budget < 10) return; // keep a little for History; try again later
+    if (budget < 5) return; // out of the inbox's share for today; try again tomorrow
     const x = new XInbox(await this.token(integration));
     const page = await x.mentions(integration.internalId, {
       sinceId: state?.cursor || undefined,
-      max: Math.min(100, Math.floor(budget / 3)),
+      max: Math.min(100, Math.floor(budget / 2)),
       firstRunDays: X_FIRST_RUN_DAYS,
     });
-    await this.addUsage('x', Math.max(1, page.reads));
+    await this.addUsage(X_INBOX_USAGE, Math.max(1, page.reads));
     const muted = await this.mutedAuthors(integration.organizationId, 'x');
     for (const m of page.items.filter((i) => !muted.has(i.author.id))) {
       await this.upsertPerson(integration.organizationId, 'x', m.author.id, m.author);
