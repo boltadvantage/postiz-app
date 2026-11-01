@@ -24,6 +24,7 @@ import dynamic from 'next/dynamic';
 import { WalletUiProvider } from '@gitroom/frontend/components/auth/providers/placeholder/wallet.ui.provider';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import useCookie from 'react-use-cookie';
+import { TwoFactorLogin } from '@gitroom/frontend/components/auth/two.factor.login';
 const WalletProvider = dynamic(
   () => import('@gitroom/frontend/components/auth/providers/wallet.provider'),
   {
@@ -45,13 +46,14 @@ export function Register() {
   const [code, setCode] = useState(getQuery?.get('code') || '');
   const [state] = useState(getQuery?.get('state') || '');
   const [show, setShow] = useState(false);
+  const [challenge, setChallenge] = useState('');
   useEffect(() => {
     if (provider && code) {
       load();
     }
   }, []);
   const load = useCallback(async () => {
-    const { token } = await (
+    const { token, twoFactor, challenge } = await (
       await fetch(`/auth/oauth/${provider?.toUpperCase() || 'LOCAL'}/exists`, {
         method: 'POST',
         body: JSON.stringify({
@@ -60,11 +62,23 @@ export function Register() {
         }),
       })
     ).json();
+    if (twoFactor && challenge) {
+      setChallenge(challenge);
+      return;
+    }
     if (token) {
       setCode(token);
       setShow(true);
     }
   }, [provider, code]);
+  if (challenge) {
+    return (
+      <TwoFactorLogin
+        challenge={challenge}
+        onCancel={() => (window.location.href = '/auth/login')}
+      />
+    );
+  }
   if (!code && !provider) {
     return <RegisterAfter token="" provider="LOCAL" />;
   }
