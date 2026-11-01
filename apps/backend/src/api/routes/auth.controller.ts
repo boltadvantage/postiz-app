@@ -122,7 +122,8 @@ export class AuthController {
         register: true,
       });
     } catch (e: any) {
-      response.status(400).send(e.message);
+      // Bolt Advantage: plain text, so an error message is never rendered as HTML
+      response.status(400).type('text/plain').send(e.message);
     }
   }
 
@@ -196,7 +197,8 @@ export class AuthController {
         login: true,
       });
     } catch (e: any) {
-      response.status(400).send(e.message);
+      // Bolt Advantage: plain text, so an error message is never rendered as HTML
+      response.status(400).type('text/plain').send(e.message);
     }
   }
 

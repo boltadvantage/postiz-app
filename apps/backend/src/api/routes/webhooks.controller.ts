@@ -17,6 +17,7 @@ import {
   OnlyURL, UpdateDto, WebhooksDto
 } from '@gitroom/nestjs-libraries/dtos/webhooks/webhooks.dto';
 import { AuthorizationActions, Sections } from '@gitroom/backend/services/auth/permissions/permission.exception.class';
+import { getSsrfSafeDispatcher } from '@gitroom/nestjs-libraries/dtos/webhooks/ssrf.safe.dispatcher';
 
 @ApiTags('Webhooks')
 @Controller('/webhooks')
@@ -56,10 +57,15 @@ export class WebhookController {
   @Post('/send')
   async sendWebhook(@Body() body: any, @Query() query: OnlyURL) {
     try {
+      // Bolt Advantage: the URL is checked when submitted, but a redirect or a
+      // DNS change could still reach an internal address; pin every hop the
+      // same way real webhook deliveries already do.
       await fetch(query.url, {
         method: 'POST',
         body: JSON.stringify(body),
         headers: { 'Content-Type': 'application/json' },
+        // @ts-ignore - undici-only option, not in the lib.dom RequestInit type
+        dispatcher: getSsrfSafeDispatcher(),
       });
     } catch (err) {
       /** sent **/
