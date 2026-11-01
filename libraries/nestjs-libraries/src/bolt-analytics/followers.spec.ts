@@ -1,25 +1,27 @@
 jest.mock('@gitroom/nestjs-libraries/integrations/social/facebook.provider', () => ({ META_GRAPH_API_VERSION: 'v25.0' }));
-jest.mock('nostr-tools', () => ({ SimplePool: class {} }));
-import { countNostrFollowers, facebookFollowers, instagramFollowers, linkedinPageFollowers } from './followers';
+import { nostrFollowers, facebookFollowers, instagramFollowers, linkedinPageFollowers } from './followers';
 
-const ME = 'me';
-let n = 0;
-const list = (pubkey: string, created_at: number, follows: string[]) =>
-  ({ id: `id${n++}`, kind: 3, pubkey, created_at, content: '', sig: '', tags: follows.map((p) => ['p', p]) } as any);
+describe('nostr follower count (Primal)', () => {
+  const realFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+  const reply = (body: unknown, ok = true) =>
+    (global.fetch = jest.fn().mockResolvedValue({ ok, status: ok ? 200 : 502, json: async () => body }) as any);
 
-describe('nostr follower count', () => {
-  it('counts people whose latest list includes you', () => {
-    expect(countNostrFollowers([list('a', 1, [ME]), list('b', 1, [ME, 'x']), list('c', 1, ['x'])], ME)).toBe(2);
+  it('reads followers_count from the user-stats event', async () => {
+    reply([{ kind: 0, content: '{}' }, { kind: 10000105, content: JSON.stringify({ followers_count: 200256, note_count: 3702 }) }]);
+    await expect(nostrFollowers('pk')).resolves.toEqual({ followers: 200256 });
+    const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
+    expect(url).toBe('https://cache2.primal.net/api');
+    expect(JSON.parse(init.body)).toEqual(['user_profile', { pubkey: 'pk' }]);
   });
 
-  it('latest list wins: a newer list without you is an unfollow', () => {
-    expect(countNostrFollowers([list('a', 1, [ME]), list('a', 5, ['x'])], ME)).toBe(0);
-    expect(countNostrFollowers([list('a', 5, [ME]), list('a', 1, ['x'])], ME)).toBe(1);
-  });
-
-  it('counts each person once across relays and ignores your own list', () => {
-    const same = list('a', 3, [ME]);
-    expect(countNostrFollowers([same, { ...same }, list(ME, 9, [ME])], ME)).toBe(1);
+  it('throws (so the day is retried) instead of storing a wrong number', async () => {
+    reply([{ kind: 0, content: '{}' }]);
+    await expect(nostrFollowers('pk')).rejects.toThrow();
+    reply({ error: 'down' }, false);
+    await expect(nostrFollowers('pk')).rejects.toThrow();
   });
 });
 

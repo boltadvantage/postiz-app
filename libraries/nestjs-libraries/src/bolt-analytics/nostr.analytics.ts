@@ -1,6 +1,6 @@
 // Bolt Advantage: Nostr engagement straight from relays (free, no API keys).
 import { SimplePool } from 'nostr-tools';
-import type { Event, Filter } from 'nostr-tools';
+import type { Event } from 'nostr-tools';
 import WebSocket from 'ws';
 import type { MetricMap } from '@gitroom/nestjs-libraries/bolt-analytics/metrics';
 
@@ -103,10 +103,6 @@ export class NostrAnalytics {
     } catch {
       return DEFAULT_RELAYS;
     }
-  }
-
-  querySync(relays: string[], filter: Filter) {
-    return this.pool.querySync(relays, filter, { maxWait: MAX_WAIT });
   }
 
   /** Top-level notes (not replies) the user published since `since`. */
