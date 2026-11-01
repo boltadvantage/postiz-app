@@ -119,3 +119,39 @@ describe('queue v2', () => {
     ]);
   });
 });
+
+describe('suggestions fill each day to its count', () => {
+  const { fillDayTimes } = require('./slots');
+  const cells = [
+    { hour: 15, posts: 6, score: 45, avgEngagement: 44 },
+    { hour: 9, posts: 6, score: 40, avgEngagement: 41 },
+    { hour: 13, posts: 4, score: 30, avgEngagement: 31 },
+    { hour: 20, posts: 1, score: 90 }, // one post: not enough
+  ];
+
+  it('a day with 1 of 3 gets exactly 2 suggestions, best first, away from what it has', () => {
+    const out = fillDayTimes(1, cells, [15 * 60], 3, 20);
+    expect(out.map((s: any) => [s.minute / 60, s.source])).toEqual([
+      [9, 'data'],
+      [13, 'data'],
+    ]);
+    expect(out[0].lift).toBe(1); // 40 vs 20 average = +100%
+  });
+
+  it('an empty day with a count of 3 gets 3, topping up with defaults', () => {
+    const out = fillDayTimes(0, cells.slice(0, 1), [], 3, 20);
+    expect(out).toHaveLength(3);
+    expect(out.filter((s: any) => s.source === 'filler')).toHaveLength(2);
+  });
+
+  it('a full or over-full day gets nothing more', () => {
+    expect(fillDayTimes(5, cells, [360, 420, 720], 3, 20)).toEqual([]);
+    expect(fillDayTimes(5, cells, [360, 420, 720, 900], 3, 20)).toEqual([]);
+  });
+
+  it('matches what "Pick best times" chooses for an empty day', () => {
+    const fill = fillDayTimes(2, cells, [], 3, 20).map((s: any) => s.minute);
+    const pick = pickDayTimes(2, cells, 3, 20).map((s) => s.minute);
+    expect(fill).toEqual(pick);
+  });
+});
