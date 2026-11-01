@@ -214,7 +214,7 @@ export const Messages: FC<{
                 key={c.id}
                 type="button"
                 onClick={() => setOpenId(c.id)}
-                className={clsx('w-full flex gap-[10px] p-[10px] text-start border-b border-newTableBorder/60', openId === c.id ? 'bg-boxFocused' : 'hover:bg-newTableHeader')}
+                className={clsx('w-full flex gap-[10px] p-[10px] text-start border-b border-newTableBorder/60', openId === c.id ? 'bg-newTableHeader shadow-[inset_3px_0_0_#612BD3]' : 'hover:bg-newTableHeader/60')}
               >
                 <div className="relative shrink-0">
                   <img src={c.person?.avatar || `/icons/platforms/${c.platform}.png`} className="w-[38px] h-[38px] rounded-full object-cover" alt="" />

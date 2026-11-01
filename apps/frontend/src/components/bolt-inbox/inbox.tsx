@@ -14,6 +14,7 @@ import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
 import { Channel, Person, PersonPanel, pretty, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
 import { Messages } from '@gitroom/frontend/components/bolt-inbox/messages';
+import { useIntegrationList } from '@gitroom/frontend/components/launches/helpers/use.integration.list';
 dayjs.extend(relativeTime);
 
 type Item = {
@@ -196,9 +197,10 @@ export const Inbox = () => {
   const { data: counts, mutate: mutateCounts } = useSWR<{ unread: number; byChannel: Record<string, number>; messages: number }>('/inbox/counts', get, { refreshInterval: 60000 });
   const { data: tags, mutate: mutateTags } = useSWR<Array<{ tag: string; people: number }>>('/inbox/tags', get);
   const { data: muted, mutate: mutateMuted } = useSWR<Person[]>('/inbox/people?muted=true', get);
-  const { data: integrations } = useSWR<{ integrations: Channel[] }>('/integrations/list', get);
+  // the app's shared channel list (other screens cache this key as a plain array)
+  const { data: integrations } = useIntegrationList();
   const channelList = useMemo(
-    () => (integrations?.integrations || []).filter((c) => ['nostr', 'x'].includes(c.identifier)),
+    () => ((integrations || []) as Channel[]).filter((c) => ['nostr', 'x'].includes(c.identifier)),
     [integrations]
   );
   const channelById = useMemo(() => new Map(channelList.map((c) => [c.id, c])), [channelList]);
