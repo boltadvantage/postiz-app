@@ -4,6 +4,8 @@ import { OrganizationRepository } from '@gitroom/nestjs-libraries/database/prism
 import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
 import { UsersService } from '@gitroom/nestjs-libraries/database/prisma/users/users.service';
 import { UsersRepository } from '@gitroom/nestjs-libraries/database/prisma/users/users.repository';
+import { BoltAnalyticsService } from '@gitroom/nestjs-libraries/bolt-analytics/bolt-analytics.service';
+import { BoltAnalyticsQueries } from '@gitroom/nestjs-libraries/bolt-analytics/bolt-analytics.queries';
 import { TwoFactorRepository } from '@gitroom/nestjs-libraries/database/prisma/two-factor/two-factor.repository';
 import { TwoFactorService } from '@gitroom/nestjs-libraries/database/prisma/two-factor/two-factor.service';
 import { ChannelVisibilityRepository } from '@gitroom/nestjs-libraries/database/prisma/channel-visibility/channel-visibility.repository';
@@ -64,6 +66,8 @@ import { AdminStatsService } from '@gitroom/nestjs-libraries/database/prisma/adm
     PrismaTransaction,
     UsersService,
     UsersRepository,
+    BoltAnalyticsService,
+    BoltAnalyticsQueries,
     TwoFactorService,
     TwoFactorRepository,
     ChannelVisibilityRepository,

@@ -81,6 +81,28 @@ export const useMenuItem = () => {
       ),
       path: '/analytics',
     },
+    // Bolt Advantage: saved analytics
+    {
+      name: t('history', 'History'),
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          fill="none"
+        >
+          <path
+            d="M2.5 10a7.5 7.5 0 1 0 2.2-5.3M2.5 3.3v3.4h3.4M10 6v4.2l2.9 1.8"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ),
+      path: '/history',
+    },
     {
       name: t('media', 'Media'),
       icon: (
