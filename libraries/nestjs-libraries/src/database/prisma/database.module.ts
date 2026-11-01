@@ -6,6 +6,7 @@ import { UsersService } from '@gitroom/nestjs-libraries/database/prisma/users/us
 import { UsersRepository } from '@gitroom/nestjs-libraries/database/prisma/users/users.repository';
 import { TwoFactorRepository } from '@gitroom/nestjs-libraries/database/prisma/two-factor/two-factor.repository';
 import { TwoFactorService } from '@gitroom/nestjs-libraries/database/prisma/two-factor/two-factor.service';
+import { ChannelVisibilityRepository } from '@gitroom/nestjs-libraries/database/prisma/channel-visibility/channel-visibility.repository';
 import { SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service';
 import { SubscriptionRepository } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.repository';
 import { NotificationService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification.service';
@@ -65,6 +66,7 @@ import { AdminStatsService } from '@gitroom/nestjs-libraries/database/prisma/adm
     UsersRepository,
     TwoFactorService,
     TwoFactorRepository,
+    ChannelVisibilityRepository,
     OrganizationService,
     OrganizationRepository,
     SubscriptionService,

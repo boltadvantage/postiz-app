@@ -3,6 +3,7 @@ import { AuthController } from '@gitroom/backend/api/routes/auth.controller';
 import { AuthService } from '@gitroom/backend/services/auth/auth.service';
 import { UsersController } from '@gitroom/backend/api/routes/users.controller';
 import { TwoFactorController } from '@gitroom/backend/api/routes/two-factor.controller';
+import { ChannelVisibilityController } from '@gitroom/backend/api/routes/channel-visibility.controller';
 import { AuthMiddleware } from '@gitroom/backend/services/auth/auth.middleware';
 import { StripeService } from '@gitroom/nestjs-libraries/services/stripe.service';
 import { PaymentController } from '@gitroom/backend/api/routes/payment.controller';
@@ -61,6 +62,7 @@ import { StripeController } from '@gitroom/backend/api/routes/stripe.controller'
 const authenticatedController = [
   UsersController,
   TwoFactorController,
+  ChannelVisibilityController,
   AnalyticsController,
   IntegrationsController,
   SettingsController,

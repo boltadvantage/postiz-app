@@ -1,7 +1,8 @@
 'use client';
 
 import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import React, { FC, useCallback, useMemo } from 'react';
+import React, { FC, useCallback, useMemo, useState } from 'react';
+import useSWR from 'swr';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { Input } from '@gitroom/react/form/input';
 import { FieldValues, FormProvider, useForm } from 'react-hook-form';
@@ -681,8 +682,82 @@ export const AddProviderComponent: FC<{
 
   const t = useT();
 
+  // Bolt Advantage: channels the organization hid from this screen
+  const [editingHidden, setEditingHidden] = useState(false);
+  const loadHidden = useCallback(
+    async () => (await fetch('/channel-visibility')).json(),
+    []
+  );
+  const { data: hiddenData, mutate: mutateHidden } = useSWR<string[]>(
+    'channel-visibility',
+    loadHidden,
+    { revalidateOnFocus: false }
+  );
+  const hidden = Array.isArray(hiddenData) ? hiddenData : [];
+  const toggleHidden = useCallback(
+    (identifier: string) => async () => {
+      const hide = !hidden.includes(identifier);
+      mutateHidden(
+        hide ? [...hidden, identifier] : hidden.filter((h) => h !== identifier),
+        false
+      );
+      const res = await fetch('/channel-visibility', {
+        method: 'PUT',
+        body: JSON.stringify({ identifier, hidden: hide }),
+      });
+      mutateHidden(res.ok ? await res.json() : undefined);
+    },
+    [hidden]
+  );
+  const available = social.filter((item) => {
+    if (!props.invite) {
+      return true;
+    }
+
+    return (
+      !item.isExternal &&
+      !item.isWeb3 &&
+      !item.isChromeExtension &&
+      !item.customFields
+    );
+  });
+  const hiddenCount = available.filter((item) =>
+    hidden.includes(item.identifier)
+  ).length;
+
   return (
     <div className="w-full flex flex-col gap-[20px] rounded-[4px] relative]">
+      <div className="flex items-center justify-end gap-[12px] text-[13px] text-textItemBlur -mb-[8px]">
+        {editingHidden ? (
+          <>
+            <span>
+              {t(
+                'hide_channels_hint',
+                'Click a channel to hide or show it. Hidden channels can be brought back here anytime.'
+              )}
+            </span>
+            <button
+              type="button"
+              className="px-[12px] h-[30px] rounded-[6px] bg-forth text-white whitespace-nowrap"
+              onClick={() => setEditingHidden(false)}
+            >
+              {t('done', 'Done')}
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="underline hover:text-textColor whitespace-nowrap"
+            onClick={() => setEditingHidden(true)}
+          >
+            {hiddenCount > 0
+              ? t('hidden_channels_edit', '{{count}} hidden · Edit list', {
+                  count: hiddenCount,
+                })
+              : t('hide_channels', 'Hide channels')}
+          </button>
+        )}
+      </div>
       <div className="flex flex-col">
         <div
           className={clsx(
@@ -692,23 +767,14 @@ export const AddProviderComponent: FC<{
             isMobile ? {} : onboarding ? 'grid-cols-9' : 'grid-cols-5'
           )}
         >
-          {social
-            .filter((item) => {
-              if (!props.invite) {
-                return true;
-              }
-
-              return (
-                !item.isExternal &&
-                !item.isWeb3 &&
-                !item.isChromeExtension &&
-                !item.customFields
-              );
-            })
+          {available
+            .filter(
+              (item) => editingHidden || !hidden.includes(item.identifier)
+            )
             .map((item) => (
               <div
                 key={item.identifier}
-                onClick={getSocialLink(
+                onClick={editingHidden ? toggleHidden(item.identifier) : getSocialLink(
                   props.invite,
                   item.identifier,
                   item.isExternal,
@@ -726,9 +792,19 @@ export const AddProviderComponent: FC<{
                   isMobile
                     ? 'flex-row h-[72px] p-[16px]'
                     : 'flex-col p-[10px] h-[100px] justify-center mobile:text-[13px] mobile:leading-[1.2]',
-                  'w-full text-[14px] rounded-[8px] bg-newTableHeader text-textColor relative items-center flex gap-[10px] cursor-pointer'
+                  'w-full text-[14px] rounded-[8px] bg-newTableHeader text-textColor relative items-center flex gap-[10px] cursor-pointer',
+                  editingHidden &&
+                    hidden.includes(item.identifier) &&
+                    'opacity-40 outline-dashed outline-1 outline-newTableBorder'
                 )}
               >
+                {editingHidden && (
+                  <div className="absolute top-[8px] start-[8px] text-[11px] px-[6px] rounded-[4px] bg-newBgColorInner">
+                    {hidden.includes(item.identifier)
+                      ? t('hidden', 'Hidden')
+                      : t('shown', 'Shown')}
+                  </div>
+                )}
                 <div>
                   {item.identifier === 'youtube' ? (
                     <img src={`/icons/platforms/youtube.svg`} />
