@@ -50,6 +50,11 @@ const KINDS: Array<{ value: Item['kind']; label: string }> = [
 ];
 const LIMITS: Record<string, number> = { x: 280 };
 const short = (s: string | null, n = 140) => (s && s.length > n ? `${s.slice(0, n)}…` : s || '');
+// Nostr clients render nostr: links as embeds; show a short label instead of the raw code
+const pretty = (s: string) =>
+  s.replace(/nostr:(note|nevent|npub|nprofile|naddr)1[0-9a-z]+/g, (_m, type: string) =>
+    type === 'npub' || type === 'nprofile' ? '↗ profile' : '↗ note'
+  );
 
 const Composer: FC<{ mode: 'reply' | 'quote'; platform: string; busy: boolean; onSend: (text: string) => void; onCancel: () => void }> = ({
   mode,
@@ -218,10 +223,10 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
           </div>
           {item.inReplyToText && (
             <div className="mt-[4px] text-[12px] text-textItemBlur border-s-2 border-newTableBorder ps-[8px]">
-              {item.kind === 'quote' ? t('quoted_your_post', 'Quoted your post:') : t('replying_to_you', 'Replying to your post:')} {short(item.inReplyToText)}
+              {item.kind === 'quote' ? t('quoted_your_post', 'Quoted your post:') : t('replying_to_you', 'Replying to your post:')} {short(item.platform === 'nostr' ? pretty(item.inReplyToText || '') : item.inReplyToText)}
             </div>
           )}
-          <div className="mt-[6px] text-[14px] whitespace-pre-wrap break-words">{item.content}</div>
+          <div className="mt-[6px] text-[14px] whitespace-pre-wrap break-words">{item.platform === 'nostr' ? pretty(item.content) : item.content}</div>
           <div className="mt-[8px] flex flex-wrap items-center gap-[6px] text-[12px]">
             <button type="button" onClick={() => setOpen(open === 'reply' ? null : 'reply')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder">
               {t('reply', 'Reply')}{item.repliedAt ? ' ✓' : ''}
@@ -350,7 +355,7 @@ export const Inbox = () => {
           <div className="text-[11px] uppercase text-textItemBlur tracking-wide">{t('type', 'Type')}</div>
           {KINDS.map((k) => (
             <button key={k.value} type="button" onClick={() => toggle(kinds, setKinds, k.value)} className={pill(kinds.includes(k.value))}>
-              {t(k.value, k.label)}
+              {t(`inbox_kind_${k.value}`, k.label)}
             </button>
           ))}
         </div>
