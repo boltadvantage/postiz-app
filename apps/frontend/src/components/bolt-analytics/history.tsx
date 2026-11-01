@@ -124,8 +124,9 @@ const BestTimes: FC<{ data?: Best }> = ({ data }) => {
                 <div
                   key={h}
                   title={c ? `${day} ${hourLabel(h)}: ${c.avgEngagement} avg engagement over ${c.posts} post${c.posts === 1 ? '' : 's'}` : `${day} ${hourLabel(h)}: no posts`}
-                  className={clsx('h-[22px] rounded-[3px]', best && 'outline outline-2 outline-white')}
+                  className="h-[22px] rounded-[3px]"
                   style={{
+                    boxShadow: best ? 'inset 0 0 0 2px #fff' : undefined,
                     background: c ? `rgba(97, 43, 211, ${0.15 + 0.85 * (c.avgEngagement / max)})` : 'var(--color-newTableHeader, rgba(255,255,255,0.04))',
                   }}
                 />
@@ -135,10 +136,10 @@ const BestTimes: FC<{ data?: Best }> = ({ data }) => {
         ))}
       </div>
       <div className="text-[12px] text-textItemBlur">
-        {t('best_times_legend', 'Darker = more engagement per post. Outlined = suggested hours (at least 2 posts). Times in {{tz}}, based on {{n}} posts from the last 90 days.', {
-          tz: data.timeZone,
+        {t('best_times_legend', 'Darker = more engagement per post. Outlined = suggested hours (at least 2 posts). Based on {{n}} posts from the last 90 days.', {
           n: data.sampleSize,
-        })}
+        })}{' '}
+        {t('times_in', 'Times in')} {data.timeZone.replace(/_/g, ' ')}.
       </div>
     </div>
   );
