@@ -16,6 +16,10 @@ interface Status {
 
 type Mode = 'idle' | 'setup' | 'codes' | 'disable' | 'regenerate';
 
+const btn = 'rounded-[8px] !h-[36px] !px-[16px] text-[14px] whitespace-nowrap shrink-0';
+const btnSecondary = `${btn} border border-newTableBorder !bg-transparent hover:!bg-newBgColorInner`;
+const btnDanger = `${btn} !bg-red-800`;
+
 const CodeInput = ({
   value,
   onChange,
@@ -152,7 +156,7 @@ const TwoFactorComponent = () => {
   return (
     <div className="my-[16px] mt-[16px] bg-sixth border-fifth border rounded-[4px] p-[24px] flex flex-col gap-[16px]">
       <div className="flex items-center justify-between gap-[24px]">
-        <div>
+        <div className="flex-1 min-w-0">
           <div>{t('two_factor_title', 'Two-factor sign-in')}</div>
           <div className="text-[14px] text-textItemBlur mt-[4px]">
             {data.enabled
@@ -169,16 +173,16 @@ const TwoFactorComponent = () => {
         </div>
         {mode === 'idle' &&
           (data.enabled ? (
-            <div className="flex gap-[8px]">
-              <Button className="rounded-[4px]" secondary onClick={() => setMode('regenerate')}>
+            <div className="flex gap-[8px] shrink-0">
+              <Button className={btnSecondary} secondary onClick={() => setMode('regenerate')}>
                 {t('two_factor_new_codes', 'New recovery codes')}
               </Button>
-              <Button className="rounded-[4px] !bg-red-700" onClick={() => setMode('disable')}>
+              <Button className={btnDanger} onClick={() => setMode('disable')}>
                 {t('turn_off', 'Turn off')}
               </Button>
             </div>
           ) : (
-            <Button className="rounded-[4px]" loading={busy} onClick={startSetup}>
+            <Button className={btn} loading={busy} onClick={startSetup}>
               {t('set_up', 'Set up')}
             </Button>
           ))}
@@ -204,10 +208,10 @@ const TwoFactorComponent = () => {
             <div>{t('two_factor_enter_code', '2. Enter the 6-digit code the app shows:')}</div>
             <div className="flex gap-[8px] items-center">
               <CodeInput value={code} onChange={setCode} />
-              <Button className="rounded-[4px]" loading={busy} disabled={!code.trim()} onClick={confirmSetup}>
+              <Button className={btn} loading={busy} disabled={!code.trim()} onClick={confirmSetup}>
                 {t('turn_on', 'Turn on')}
               </Button>
-              <Button className="rounded-[4px]" secondary onClick={cancelSetup}>
+              <Button className={btnSecondary} secondary onClick={cancelSetup}>
                 {t('cancel', 'Cancel')}
               </Button>
             </div>
@@ -231,11 +235,11 @@ const TwoFactorComponent = () => {
             ))}
           </div>
           <div className="flex gap-[8px]">
-            <Button className="rounded-[4px]" onClick={downloadCodes}>
+            <Button className={btn} onClick={downloadCodes}>
               {t('download', 'Download')}
             </Button>
             <Button
-              className="rounded-[4px]"
+              className={btnSecondary}
               secondary
               onClick={() => {
                 setRecoveryCodes([]);
@@ -258,14 +262,14 @@ const TwoFactorComponent = () => {
           <div className="flex gap-[8px] items-center">
             <CodeInput value={code} onChange={setCode} />
             <Button
-              className={mode === 'disable' ? 'rounded-[4px] !bg-red-700' : 'rounded-[4px]'}
+              className={mode === 'disable' ? btnDanger : btn}
               loading={busy}
               disabled={!code.trim()}
               onClick={mode === 'disable' ? disable : regenerate}
             >
               {mode === 'disable' ? t('turn_off', 'Turn off') : t('two_factor_new_codes', 'New recovery codes')}
             </Button>
-            <Button className="rounded-[4px]" secondary onClick={reset}>
+            <Button className={btnSecondary} secondary onClick={reset}>
               {t('cancel', 'Cancel')}
             </Button>
           </div>
