@@ -3,6 +3,7 @@ import { Body, Controller, Get, HttpException, Param, Post, Put, Query } from '@
 import { ApiTags } from '@nestjs/swagger';
 import { Organization, User } from '@prisma/client';
 import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
+import { requireOrgAdmin } from '@gitroom/nestjs-libraries/user/require.org.admin';
 import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
 import { QueueService } from '@gitroom/nestjs-libraries/bolt-queue/queue.service';
 import { PauseService } from '@gitroom/nestjs-libraries/bolt-queue/pause.service';
@@ -32,6 +33,7 @@ export class QueueController {
   /** Pause stops every scheduled post now; resume restarts them (missed ones go into the queue). */
   @Put('/pause')
   async setPause(@GetOrgFromRequest() org: Organization, @Body() body: { paused?: boolean }) {
+    requireOrgAdmin(org);
     if (body?.paused) {
       return { paused: true, ...(await this._pause.pause(org.id)) };
     }

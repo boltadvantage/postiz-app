@@ -111,7 +111,8 @@ export class InboxService {
     const data = {
       ...(p.handle ? { handle: clip(p.handle, 100) } : {}),
       ...(p.name ? { name: clip(p.name, 100) } : {}),
-      ...(p.avatar ? { avatar: clip(p.avatar, 500) } : {}),
+      // profile pictures come from strangers: only plain https images
+      ...(p.avatar && /^https:\/\/[^\s"'<>]+$/i.test(p.avatar) ? { avatar: clip(p.avatar, 500) } : {}),
     };
     await this._prisma.inboxPerson.upsert({
       where: { organizationId_platform_authorId: { organizationId, platform, authorId } },

@@ -1,10 +1,10 @@
 // Bolt Advantage: Nostr direct messages. Reads both kinds people use —
 // NIP-04 (kind 4, older clients) and NIP-17 (gift-wrapped kind 14, current
 // clients) — and answers in whichever one the conversation uses.
-import { SimplePool, finalizeEvent, getPublicKey, nip04, nip59 } from 'nostr-tools';
+import { SimplePool, finalizeEvent, getEventHash, getPublicKey, nip04, nip44, nip59, verifyEvent } from 'nostr-tools';
 import type { Event, EventTemplate } from 'nostr-tools';
 import { DEFAULT_RELAYS } from '@gitroom/nestjs-libraries/bolt-analytics/nostr.analytics';
-import { firstFulfilled, relayOverride, secretKeyFromHex } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.inbox';
+import { firstFulfilled, publicRelays, relayOverride, secretKeyFromHex } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.inbox';
 
 const MAX_WAIT = 8000;
 // NIP-59 wraps carry a random timestamp up to two days old, so look back further than the cursor
@@ -47,16 +47,32 @@ export function fromNip04(e: Event, self: string, sk: Uint8Array): NostrDm | nul
   }
 }
 
-/** NIP-17 gift wrap addressed to us. Group chats (more than one other person) are skipped. */
-export function fromWrap(wrap: Event, self: string, sk: Uint8Array): NostrDm | null {
-  if (wrap.kind !== 1059) return null;
-  let rumor: ReturnType<typeof nip59.unwrapEvent>;
+/**
+ * Opens a NIP-59 gift wrap and returns the rumor only if it's authentic: the
+ * seal must be a validly signed kind 13 by the same key the rumor claims as
+ * its author, and the rumor's id must match its content. (nostr-tools'
+ * unwrapEvent only decrypts, so anyone could forge a message "from" anyone,
+ * including from you.)
+ */
+export function openWrap(wrap: Event, sk: Uint8Array) {
   try {
-    rumor = nip59.unwrapEvent(wrap, sk);
+    const seal = JSON.parse(nip44.decrypt(wrap.content, nip44.getConversationKey(sk, wrap.pubkey))) as Event;
+    if (seal?.kind !== 13 || !verifyEvent(seal)) return null;
+    const rumor = JSON.parse(nip44.decrypt(seal.content, nip44.getConversationKey(sk, seal.pubkey)));
+    if (!rumor || typeof rumor.content !== 'string' || !Array.isArray(rumor.tags)) return null;
+    if (rumor.pubkey !== seal.pubkey) return null;
+    if (getEventHash(rumor) !== rumor.id) return null;
+    return rumor as ReturnType<typeof nip59.unwrapEvent>;
   } catch {
     return null;
   }
-  if (rumor.kind !== 14) return null;
+}
+
+/** NIP-17 gift wrap addressed to us. Group chats (more than one other person) are skipped. */
+export function fromWrap(wrap: Event, self: string, sk: Uint8Array): NostrDm | null {
+  if (wrap.kind !== 1059) return null;
+  const rumor = openWrap(wrap, sk);
+  if (!rumor || rumor.kind !== 14) return null;
   const others = [...new Set([rumor.pubkey, ...pTags(rumor.tags)])].filter((p) => p !== self);
   if (others.length !== 1) return null;
   return {
@@ -104,7 +120,8 @@ export class NostrDms {
     if (fixed) return fixed;
     try {
       const list = await this.pool.get(DEFAULT_RELAYS, { kinds: [10050], authors: [pubkey] }, { maxWait: MAX_WAIT });
-      return [...new Set((list?.tags || []).filter((t) => t[0] === 'relay' && t[1]?.startsWith('wss://')).map((t) => t[1].replace(/\/$/, '')))].slice(0, 6);
+      // anyone can publish this list (it's the other person's), so only public hosts
+      return publicRelays((list?.tags || []).filter((t) => t[0] === 'relay').map((t) => t[1]), 6);
     } catch {
       return [];
     }

@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { clearFailures, lockedFor, lockedMessage, recordFailure } from '@gitroom/nestjs-libraries/redis/bolt.attempts';
 import { ThrottlerRealIpGuard } from '@gitroom/nestjs-libraries/throttler/throttler.provider';
 import { Response, Request } from 'express';
 
@@ -35,6 +36,10 @@ import {
   setAuthCookie,
   userIdFromJwt,
 } from '@gitroom/backend/services/auth/two.factor.session';
+
+// Bolt Advantage: 10 wrong passwords per account per 15 minutes
+const LOGIN_FAIL_LIMIT = 10;
+const LOGIN_WINDOW_SECONDS = 15 * 60;
 
 @ApiTags('Auth')
 @Controller('/auth')
@@ -127,6 +132,9 @@ export class AuthController {
     }
   }
 
+  // Bolt Advantage: password guesses are limited per visitor and per account
+  @UseGuards(ThrottlerRealIpGuard)
+  @Throttle({ default: { limit: 30, ttl: 15 * 60 * 1000 } })
   @Post('/login')
   async login(
     @Req() req: Request,
@@ -135,6 +143,14 @@ export class AuthController {
     @RealIP() ip: string,
     @UserAgent() userAgent: string
   ) {
+    const attemptKey = body?.provider === 'LOCAL' && body?.email ? `login:${String(body.email).trim().toLowerCase()}` : '';
+    if (attemptKey) {
+      const locked = await lockedFor(attemptKey, LOGIN_FAIL_LIMIT);
+      if (locked) {
+        response.status(429).type('text/plain').send(lockedMessage(locked));
+        return;
+      }
+    }
     try {
       const getOrgFromCookie = this._authService.getOrgFromCookie(
         req?.cookies?.org
@@ -149,6 +165,7 @@ export class AuthController {
       );
 
       // Bolt Advantage: password was right; hold the session until the code step.
+      if (attemptKey) await clearFailures(attemptKey);
       const userId = userIdFromJwt(jwt);
       if (await this._twoFactorService.isEnabled(userId)) {
         response.status(200).json({
@@ -197,6 +214,7 @@ export class AuthController {
         login: true,
       });
     } catch (e: any) {
+      if (attemptKey) await recordFailure(attemptKey, LOGIN_WINDOW_SECONDS);
       // Bolt Advantage: plain text, so an error message is never rendered as HTML
       response.status(400).type('text/plain').send(e.message);
     }
@@ -216,6 +234,10 @@ export class AuthController {
       return response
         .status(400)
         .send('Your sign-in expired. Enter your email and password again.');
+    }
+    const locked = await this._twoFactorService.lockedFor(userId);
+    if (locked) {
+      return response.status(429).type('text/plain').send(lockedMessage(locked));
     }
 
     if (!(await this._twoFactorService.verify(userId, String(code || '')))) {

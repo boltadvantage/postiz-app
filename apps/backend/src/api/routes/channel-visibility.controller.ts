@@ -3,6 +3,7 @@ import { Body, Controller, Get, HttpException, Put } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Organization } from '@prisma/client';
 import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
+import { requireOrgAdmin } from '@gitroom/nestjs-libraries/user/require.org.admin';
 import { ChannelVisibilityRepository } from '@gitroom/nestjs-libraries/database/prisma/channel-visibility/channel-visibility.repository';
 import { IntegrationManager } from '@gitroom/nestjs-libraries/integrations/integration.manager';
 
@@ -25,6 +26,7 @@ export class ChannelVisibilityController {
     @Body('identifier') identifier: string,
     @Body('hidden') hidden: boolean
   ) {
+    requireOrgAdmin(org);
     if (
       typeof identifier !== 'string' ||
       !this._integrationManager

@@ -10,10 +10,27 @@ import {
   verifyTotp,
 } from '@gitroom/helpers/auth/two.factor';
 import { toDataURL } from 'qrcode';
+import { clearFailures, lockedFor, recordFailure } from '@gitroom/nestjs-libraries/redis/bolt.attempts';
+
+// at most 5 wrong codes per account per 15 minutes, whatever address they come from
+export const TWO_FACTOR_FAIL_LIMIT = 5;
+const TWO_FACTOR_WINDOW_SECONDS = 15 * 60;
+const failKey = (userId: string) => `2fa:${userId}`;
 
 @Injectable()
 export class TwoFactorService {
   constructor(private _twoFactorRepository: TwoFactorRepository) {}
+
+  /** Seconds until this account may try another code (0 = not locked). */
+  lockedFor(userId: string) {
+    return lockedFor(failKey(userId), TWO_FACTOR_FAIL_LIMIT);
+  }
+
+  private async counted(userId: string, ok: boolean) {
+    if (ok) await clearFailures(failKey(userId));
+    else await recordFailure(failKey(userId), TWO_FACTOR_WINDOW_SECONDS);
+    return ok;
+  }
 
   async isEnabled(userId: string) {
     const record = await this._twoFactorRepository.get(userId);
@@ -51,7 +68,11 @@ export class TwoFactorService {
     if (!record || record.enabledAt) {
       throw new Error('Start setup first');
     }
+    if (await this.lockedFor(userId)) {
+      throw new Error('Too many wrong codes. Try again in 15 minutes.');
+    }
     const step = verifyTotp(decryptTwoFactorSecret(record.secret), code);
+    await this.counted(userId, step !== null);
     if (step === null) {
       throw new Error('That code is not valid. Check the time on your phone and try again.');
     }
@@ -64,8 +85,13 @@ export class TwoFactorService {
     return codes;
   }
 
-  /** Accepts a 6-digit authenticator code or a one-time recovery code. */
+  /** Accepts a 6-digit authenticator code or a one-time recovery code; refuses while locked out. */
   async verify(userId: string, code: string) {
+    if (await this.lockedFor(userId)) return false;
+    return this.counted(userId, await this.check(userId, code));
+  }
+
+  private async check(userId: string, code: string) {
     const record = await this._twoFactorRepository.get(userId);
     if (!record?.enabledAt) {
       return false;

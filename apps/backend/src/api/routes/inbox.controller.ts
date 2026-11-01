@@ -5,6 +5,7 @@ import { Organization } from '@prisma/client';
 import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
 import { InboxService } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
 import { DmService } from '@gitroom/nestjs-libraries/bolt-inbox/dm.service';
+import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 
 const list = (v?: string) => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : undefined);
 const wrap = async <T>(fn: () => Promise<T>) => {
@@ -72,6 +73,10 @@ export class InboxController {
 
   @Post('/sync')
   async sync(@GetOrgFromRequest() org: Organization) {
+    // "Check now" spends the install-wide X budget: once a minute per workspace
+    if (!(await ioRedis.set(`bolt-inbox:check-now:${org.id}`, '1', 'EX', 60, 'NX'))) {
+      return { started: false, running: false, wait: true };
+    }
     if ((await this._inbox.isRunning()) || (await this._dms.isRunning())) return { started: false, running: true };
     this._inbox
       .syncAll(org.id, true)

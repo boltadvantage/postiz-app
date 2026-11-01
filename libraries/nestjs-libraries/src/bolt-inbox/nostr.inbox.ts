@@ -4,6 +4,7 @@ import { SimplePool, finalizeEvent, nip19 } from 'nostr-tools';
 import type { Event, EventTemplate } from 'nostr-tools';
 import WebSocket from 'ws';
 import { DEFAULT_RELAYS } from '@gitroom/nestjs-libraries/bolt-analytics/nostr.analytics';
+import { isSafePublicHttpsUrl } from '@gitroom/nestjs-libraries/dtos/webhooks/webhook.url.validator';
 
 // @ts-ignore nostr-tools needs a global WebSocket in Node
 global.WebSocket = global.WebSocket || WebSocket;
@@ -25,6 +26,19 @@ export type NostrProfile = { name?: string; avatar?: string; handle?: string };
 export function relayOverride(): string[] | null {
   const v = (process.env.BOLT_NOSTR_RELAYS || '').split(',').map((s) => s.trim()).filter(Boolean);
   return v.length ? v : null;
+}
+
+/**
+ * Relay URLs from a Nostr event, kept only if they're wss:// on a public
+ * address, so a published relay list can't point the server at internal hosts.
+ */
+export async function publicRelays(urls: Array<string | undefined>, max: number): Promise<string[]> {
+  const out: string[] = [];
+  for (const raw of [...new Set(urls.filter((u): u is string => typeof u === 'string' && u.startsWith('wss://')).map((u) => u.replace(/\/$/, '')))]) {
+    if (out.length >= max) break;
+    if (await isSafePublicHttpsUrl(raw.replace(/^wss:/, 'https:'))) out.push(raw);
+  }
+  return out;
 }
 
 /** NIP-10: the event this one replies to (marked "reply", else "root", else the last e tag). */
@@ -137,10 +151,8 @@ export class NostrInbox {
     if (fixed) return fixed;
     try {
       const list = await this.pool.get(DEFAULT_RELAYS, { kinds: [10002], authors: [pubkey] }, { maxWait: MAX_WAIT });
-      const mine = (list?.tags || [])
-        .filter((t) => t[0] === 'r' && t[1]?.startsWith('wss://'))
-        .map((t) => t[1].replace(/\/$/, ''));
-      return [...new Set([...DEFAULT_RELAYS, ...mine.slice(0, 8)])];
+      const mine = await publicRelays((list?.tags || []).filter((t) => t[0] === 'r').map((t) => t[1]), 8);
+      return [...new Set([...DEFAULT_RELAYS, ...mine])];
     } catch {
       return DEFAULT_RELAYS;
     }
