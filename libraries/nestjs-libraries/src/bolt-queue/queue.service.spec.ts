@@ -56,3 +56,21 @@ describe('queue suggestions', () => {
     expect(rankSuggestions([])).toEqual([]);
   });
 });
+
+import { pickDayTimes } from './slots';
+
+describe('suggestions and picking agree', () => {
+  it('Pick best times chooses the same hours the suggestions show', () => {
+    const overall = 20;
+    const cells = [
+      { weekday: 1, hour: 9, posts: 4, avgEngagement: 35, score: 28 },
+      { weekday: 1, hour: 12, posts: 3, avgEngagement: 30, score: 25 },
+      { weekday: 1, hour: 19, posts: 3, avgEngagement: 28, score: 23 },
+      { weekday: 1, hour: 7, posts: 5, avgEngagement: 8, score: 12 },
+    ];
+    const suggested = rankSuggestions(cells, 3, 2, overall).map((s) => s.minute / 60);
+    const picked = pickDayTimes(1, cells, 3, overall).filter((s) => s.source === 'data').map((s) => s.minute / 60);
+    expect(suggested).toEqual([9, 12, 19]);
+    expect(picked).toEqual(suggested);
+  });
+});

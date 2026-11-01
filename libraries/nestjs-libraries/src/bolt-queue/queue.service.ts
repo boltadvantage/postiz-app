@@ -4,7 +4,21 @@ import { Injectable } from '@nestjs/common';
 import dayjs from 'dayjs';
 import { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
 import { BoltAnalyticsQueries } from '@gitroom/nestjs-libraries/bolt-analytics/bolt-analytics.queries';
-import { isValidTimeZone, minuteKey, nextSlots, normalizeSlots, Slot } from '@gitroom/nestjs-libraries/bolt-queue/slots';
+import dayjsTz from 'dayjs/plugin/timezone';
+import dayjsUtc from 'dayjs/plugin/utc';
+import {
+  isValidTimeZone,
+  minuteKey,
+  nextSlots,
+  normalizeDaysOff,
+  normalizePerDay,
+  normalizeSlots,
+  pickDayTimes,
+  Slot,
+} from '@gitroom/nestjs-libraries/bolt-queue/slots';
+
+dayjs.extend(dayjsUtc);
+dayjs.extend(dayjsTz);
 
 const HORIZON_DAYS = 90;
 // below this many posts with stats, a channel's own pattern is mostly noise
@@ -23,10 +37,13 @@ export type Suggestion = {
 export function rankSuggestions(
   grid: Array<{ weekday: number; hour: number; posts: number; avgEngagement: number; score: number }>,
   perDay = 3,
-  minPosts = 2
+  minPosts = 2,
+  /** the (recency-weighted) average engagement per post; same baseline the picker uses */
+  overall?: number
 ): Suggestion[] {
   const totalPosts = grid.reduce((s, g) => s + g.posts, 0);
-  const avg = totalPosts ? grid.reduce((s, g) => s + g.avgEngagement * g.posts, 0) / totalPosts : 0;
+  const avg =
+    overall ?? (totalPosts ? grid.reduce((s, g) => s + g.avgEngagement * g.posts, 0) / totalPosts : 0);
   // rank on the cautious score and only suggest slots that beat the average
   const out: Suggestion[] = [];
   for (let day = 0; day < 7; day++) {
@@ -64,7 +81,20 @@ export class QueueService {
 
   private async load(integrationId: string) {
     const q = await this._prisma.channelQueue.findUnique({ where: { integrationId } });
-    return q ? { ...q, slots: normalizeSlots(JSON.parse(q.slots || '[]')) } : null;
+    if (!q) return null;
+    const parse = (v: string, fallback: unknown) => {
+      try {
+        return JSON.parse(v);
+      } catch {
+        return fallback;
+      }
+    };
+    return {
+      ...q,
+      slots: normalizeSlots(parse(q.slots, [])),
+      daysOff: normalizeDaysOff(parse(q.daysOff, [])),
+      perDay: normalizePerDay(parse(q.perDay, {})),
+    };
   }
 
   /** Minutes already used by this channel's scheduled or published posts. */
@@ -95,6 +125,7 @@ export class QueueService {
       taken: await this.taken(integrationId, from),
       count,
       horizonDays: HORIZON_DAYS,
+      daysOff: new Set(q.daysOff),
     });
   }
 
@@ -132,7 +163,7 @@ export class QueueService {
         // every queue time this week, filled or open
         const allSlots =
           queue && !queue.paused
-            ? nextSlots({ slots: queue.slots, timeZone: queue.timeZone, from: now, count: 200, horizonDays: 7 })
+            ? nextSlots({ slots: queue.slots, timeZone: queue.timeZone, from: now, count: 200, horizonDays: 7, daysOff: new Set(queue.daysOff) })
             : [];
         const byMinute = new Map(scheduled.map((p) => [minuteKey(p.publishDate), p]));
         const week = [
@@ -147,7 +178,17 @@ export class QueueService {
         ].sort((a, b) => a.at.getTime() - b.at.getTime());
         return {
           integration,
-          queue: queue ? { timeZone: queue.timeZone, slots: queue.slots, paused: queue.paused } : null,
+          queue: queue
+            ? {
+                timeZone: queue.timeZone,
+                slots: queue.slots,
+                paused: queue.paused,
+                daysOff: queue.daysOff,
+                perDay: queue.perDay,
+                autoAdjust: queue.autoAdjust,
+                lastAdjustedAt: queue.lastAdjustedAt,
+              }
+            : null,
           next: queue ? (await this.next(organizationId, integration.id, 1))?.[0] || null : null,
           week,
         };
@@ -162,7 +203,7 @@ export class QueueService {
   async save(
     organizationId: string,
     integrationId: string,
-    body: { timeZone?: string; slots?: unknown; paused?: boolean }
+    body: { timeZone?: string; slots?: unknown; paused?: boolean; daysOff?: unknown; perDay?: unknown; autoAdjust?: boolean }
   ) {
     const integration = await this._prisma.integration.findFirst({
       where: { id: integrationId, organizationId, deletedAt: null },
@@ -175,29 +216,100 @@ export class QueueService {
     if (!timeZone) {
       throw new Error('Pick a valid timezone');
     }
-    const slots = JSON.stringify(normalizeSlots(body.slots));
-    const paused = !!body.paused;
+    // fields left out keep their saved value (days off are saved on their own)
+    const data = {
+      timeZone,
+      slots: JSON.stringify(normalizeSlots(body.slots)),
+      paused: !!body.paused,
+      ...(body.daysOff !== undefined ? { daysOff: JSON.stringify(normalizeDaysOff(body.daysOff)) } : {}),
+      ...(body.perDay !== undefined ? { perDay: JSON.stringify(normalizePerDay(body.perDay)) } : {}),
+      ...(body.autoAdjust !== undefined ? { autoAdjust: !!body.autoAdjust } : {}),
+    };
     await this._prisma.channelQueue.upsert({
       where: { integrationId },
-      create: { integrationId, organizationId, timeZone, slots, paused },
-      update: { timeZone, slots, paused },
+      create: { integrationId, organizationId, ...data },
+      update: data,
     });
     return this.load(integrationId);
+  }
+
+  /** Save only the days off (toggled from the week view without touching other edits). */
+  async setDaysOff(organizationId: string, integrationId: string, daysOff: unknown, timeZone?: string) {
+    const integration = await this._prisma.integration.findFirst({ where: { id: integrationId, organizationId, deletedAt: null }, select: { id: true } });
+    if (!integration) throw new Error('Channel not found');
+    const tz = timeZone && isValidTimeZone(timeZone) ? timeZone : 'UTC';
+    const value = JSON.stringify(normalizeDaysOff(daysOff));
+    await this._prisma.channelQueue.upsert({
+      where: { integrationId },
+      create: { integrationId, organizationId, timeZone: tz, daysOff: value },
+      update: { daysOff: value },
+    });
+    return this.load(integrationId);
+  }
+
+  /**
+   * Pick the best times for each weekday from the channel's posts-per-day
+   * counts, replacing that day's times. Days with a count of 0 are cleared;
+   * days without a count are left as they are.
+   */
+  async autoPick(organizationId: string, integrationId: string, perDayInput?: unknown) {
+    const q = await this.load(integrationId);
+    if (!q || q.organizationId !== organizationId) throw new Error('Set up this queue first');
+    const perDay = perDayInput !== undefined ? normalizePerDay(perDayInput) : q.perDay;
+    const days = Object.keys(perDay).map(Number);
+    if (!days.length) throw new Error('Set how many posts you want on at least one day');
+    const sug = await this.suggestions(organizationId, integrationId, q.timeZone);
+    const overall = sug.overallAvg;
+    const slots = [
+      ...q.slots.filter((s) => !days.includes(s.day)),
+      ...days.flatMap((d) => pickDayTimes(d, sug.grid.filter((g) => g.weekday === d), perDay[d], overall)),
+    ];
+    await this._prisma.channelQueue.update({
+      where: { integrationId },
+      data: { slots: JSON.stringify(normalizeSlots(slots)), perDay: JSON.stringify(perDay), lastAdjustedAt: new Date() },
+    });
+    return this.load(integrationId);
+  }
+
+  /**
+   * Weekly refresh: queues with "keep times updated" are re-picked on Sunday
+   * from 5 AM in their own timezone, once per week.
+   */
+  async adjustDue(now = new Date()) {
+    const queues = await this._prisma.channelQueue.findMany({ where: { autoAdjust: true } });
+    let adjusted = 0;
+    for (const q of queues) {
+      if (!isValidTimeZone(q.timeZone)) continue;
+      const local = dayjs(now).tz(q.timeZone);
+      if (local.day() !== 0 || local.hour() < 5) continue;
+      const thisSunday5 = local.startOf('day').add(5, 'hour');
+      if (q.lastAdjustedAt && dayjs(q.lastAdjustedAt).isAfter(thisSunday5.subtract(1, 'minute'))) continue;
+      try {
+        await this.autoPick(q.organizationId, q.integrationId);
+        adjusted += 1;
+      } catch {
+        /* nothing to pick for this queue */
+      }
+    }
+    return adjusted;
   }
 
   /** Suggested times per weekday from saved analytics, with how sure we are. */
   async suggestions(organizationId: string, integrationId: string, timeZone: string) {
     const own = await this._analytics.bestTimes(organizationId, integrationId, timeZone);
     if (own.sampleSize >= MIN_CHANNEL_SAMPLE) {
-      return { source: 'channel', sampleSize: own.sampleSize, timeZone, suggestions: rankSuggestions(own.grid) };
+      return { source: 'channel', sampleSize: own.sampleSize, timeZone, suggestions: rankSuggestions(own.grid, 3, 2, own.overallAvg), grid: own.grid, overallAvg: own.overallAvg };
     }
     const all = await this._analytics.bestTimes(organizationId, undefined, timeZone);
+    const use = all.sampleSize > own.sampleSize ? all : own;
     return {
       source: all.sampleSize > own.sampleSize ? 'all-channels' : 'channel',
       sampleSize: Math.max(all.sampleSize, own.sampleSize),
       channelSampleSize: own.sampleSize,
       timeZone,
-      suggestions: rankSuggestions((all.sampleSize > own.sampleSize ? all : own).grid),
+      suggestions: rankSuggestions(use.grid, 3, 2, use.overallAvg),
+      grid: use.grid,
+      overallAvg: use.overallAvg,
     };
   }
 }

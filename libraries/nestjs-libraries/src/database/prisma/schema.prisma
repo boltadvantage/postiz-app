@@ -227,7 +227,32 @@ model ChannelQueue {
   timeZone       String
   slots          String   @default("[]")
   paused         Boolean  @default(false)
+  /// local dates (YYYY-MM-DD) the queue skips; posts scheduled directly still go out
+  daysOff        String   @default("[]")
+  /// posts wanted per weekday, e.g. {"1":3,"2":1}; used to pick the best times
+  perDay         String   @default("{}")
+  /// re-pick the best times every Sunday morning
+  autoAdjust     Boolean  @default(false)
+  lastAdjustedAt DateTime?
   updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+}
+
+/// Bolt Advantage: "pause all posting" for an organization.
+model BoltPostingPause {
+  organizationId String    @id
+  paused         Boolean   @default(false)
+  pausedAt       DateTime?
+  updatedAt      DateTime  @updatedAt
+}
+
+/// Bolt Advantage: posts whose publishing was stopped by a pause.
+model BoltHeldPost {
+  postId         String   @id
+  organizationId String
+  originalDate   DateTime
+  heldAt         DateTime @default(now())
 
   @@index([organizationId])
 }

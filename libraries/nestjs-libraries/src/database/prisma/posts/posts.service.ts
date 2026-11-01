@@ -59,6 +59,7 @@ import { postContentPlainText } from '@gitroom/helpers/utils/sanitize.post.conte
 import { CreatePublicCommentDto } from '@gitroom/nestjs-libraries/dtos/comments/add.comment.dto';
 import { countLength } from '@gitroom/helpers/utils/count.length';
 import { QueueService } from '@gitroom/nestjs-libraries/bolt-queue/queue.service';
+import { PauseService } from '@gitroom/nestjs-libraries/bolt-queue/pause.service';
 
 type PostWithConditionals = Post & {
   integration?: Integration;
@@ -77,7 +78,8 @@ export class PostsService {
     private _openaiService: OpenaiService,
     private _temporalService: TemporalService,
     private _refreshIntegrationService: RefreshIntegrationService,
-    private _queueService: QueueService
+    private _queueService: QueueService,
+    private _pauseService: PauseService
   ) {}
 
   searchForMissingThreeHoursPosts() {
@@ -968,6 +970,12 @@ export class PostsService {
       return;
     }
 
+    // Bolt Advantage: while posting is paused, hold the post instead of starting it
+    if (await this._pauseService.isPaused(orgId)) {
+      await this._pauseService.hold(orgId, postId);
+      return;
+    }
+
     try {
       await this._temporalService.client
         .getRawClient()
@@ -1406,6 +1414,35 @@ export class PostsService {
     } catch (err) {}
 
     return { id, state };
+  }
+
+  /**
+   * Bolt Advantage: un-pause. Held posts whose time is still ahead keep it;
+   * ones whose time passed while paused go into their channel's next open
+   * queue time (one after another, so they don't collide).
+   */
+  async resumePosting(orgId: string) {
+    await this._pauseService.setPaused(orgId, false);
+    const result = { restarted: 0, requeued: 0, skipped: 0 };
+    for (const h of await this._pauseService.held(orgId)) {
+      try {
+        const post = await this._postRepository.getPostById(h.postId, orgId);
+        if (!post || post.deletedAt || post.state !== 'QUEUE') {
+          result.skipped += 1;
+        } else if (dayjs(post.publishDate).isAfter(dayjs().add(1, 'minute'))) {
+          await this.startWorkflow(post.integration.providerIdentifier.split('-')[0].toLowerCase(), post.id, orgId, 'QUEUE');
+          result.restarted += 1;
+        } else {
+          const next = await this.findFreeDateTime(orgId, post.integrationId);
+          await this.changeDate(orgId, post.id, next, 'schedule', true);
+          result.requeued += 1;
+        }
+      } catch (err) {
+        result.skipped += 1;
+      }
+      await this._pauseService.release(h.postId);
+    }
+    return result;
   }
 
   async changeDate(
