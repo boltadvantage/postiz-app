@@ -37,10 +37,13 @@ export type Suggestion = {
 export function rankSuggestions(
   grid: Array<{ weekday: number; hour: number; posts: number; avgEngagement: number; score: number }>,
   perDay = 3,
-  minPosts = 2
+  minPosts = 2,
+  /** the (recency-weighted) average engagement per post; same baseline the picker uses */
+  overall?: number
 ): Suggestion[] {
   const totalPosts = grid.reduce((s, g) => s + g.posts, 0);
-  const avg = totalPosts ? grid.reduce((s, g) => s + g.avgEngagement * g.posts, 0) / totalPosts : 0;
+  const avg =
+    overall ?? (totalPosts ? grid.reduce((s, g) => s + g.avgEngagement * g.posts, 0) / totalPosts : 0);
   // rank on the cautious score and only suggest slots that beat the average
   const out: Suggestion[] = [];
   for (let day = 0; day < 7; day++) {
@@ -295,7 +298,7 @@ export class QueueService {
   async suggestions(organizationId: string, integrationId: string, timeZone: string) {
     const own = await this._analytics.bestTimes(organizationId, integrationId, timeZone);
     if (own.sampleSize >= MIN_CHANNEL_SAMPLE) {
-      return { source: 'channel', sampleSize: own.sampleSize, timeZone, suggestions: rankSuggestions(own.grid), grid: own.grid, overallAvg: own.overallAvg };
+      return { source: 'channel', sampleSize: own.sampleSize, timeZone, suggestions: rankSuggestions(own.grid, 3, 2, own.overallAvg), grid: own.grid, overallAvg: own.overallAvg };
     }
     const all = await this._analytics.bestTimes(organizationId, undefined, timeZone);
     const use = all.sampleSize > own.sampleSize ? all : own;
@@ -304,7 +307,7 @@ export class QueueService {
       sampleSize: Math.max(all.sampleSize, own.sampleSize),
       channelSampleSize: own.sampleSize,
       timeZone,
-      suggestions: rankSuggestions(use.grid),
+      suggestions: rankSuggestions(use.grid, 3, 2, use.overallAvg),
       grid: use.grid,
       overallAvg: use.overallAvg,
     };
