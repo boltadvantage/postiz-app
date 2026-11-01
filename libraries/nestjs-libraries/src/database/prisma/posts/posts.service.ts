@@ -58,6 +58,7 @@ import { stripHtmlValidation } from '@gitroom/helpers/utils/strip.html.validatio
 import { postContentPlainText } from '@gitroom/helpers/utils/sanitize.post.content';
 import { CreatePublicCommentDto } from '@gitroom/nestjs-libraries/dtos/comments/add.comment.dto';
 import { countLength } from '@gitroom/helpers/utils/count.length';
+import { QueueService } from '@gitroom/nestjs-libraries/bolt-queue/queue.service';
 
 type PostWithConditionals = Post & {
   integration?: Integration;
@@ -75,7 +76,8 @@ export class PostsService {
     private _shortLinkService: ShortLinkService,
     private _openaiService: OpenaiService,
     private _temporalService: TemporalService,
-    private _refreshIntegrationService: RefreshIntegrationService
+    private _refreshIntegrationService: RefreshIntegrationService,
+    private _queueService: QueueService
   ) {}
 
   searchForMissingThreeHoursPosts() {
@@ -1543,6 +1545,14 @@ export class PostsService {
   }
 
   async findFreeDateTime(orgId: string, integrationId?: string) {
+    // Bolt Advantage: a channel's own queue (per-weekday local times) wins
+    const queued = integrationId
+      ? (await this._queueService.next(orgId, integrationId, 1))?.[0]
+      : await this._queueService.earliest(orgId);
+    if (queued) {
+      return dayjs.utc(queued).format('YYYY-MM-DDTHH:mm:00');
+    }
+
     const findTimes = await this._integrationService.findFreeDateTime(
       orgId,
       integrationId

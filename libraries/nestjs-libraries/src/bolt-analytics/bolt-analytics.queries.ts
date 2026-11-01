@@ -22,7 +22,18 @@ export function localSlot(date: Date, timeZone: string) {
   return { weekday, hour };
 }
 
-export type SlotStat = { weekday: number; hour: number; posts: number; avgEngagement: number };
+export type SlotStat = {
+  weekday: number;
+  hour: number;
+  posts: number;
+  avgEngagement: number;
+  /** avgEngagement pulled toward the overall average until a slot has enough posts */
+  score: number;
+};
+
+// A slot "borrows" this many posts' worth of the overall average, so two lucky
+// posts can't outrank a time that has done well many times.
+export const SHRINK_POSTS = 5;
 
 /**
  * Average engagement per weekday x hour, and the best hours per weekday.
@@ -43,21 +54,46 @@ export function bestTimes(
     c.total += p.engagement;
     cells.set(key, c);
   }
+  const overall = posts.length ? posts.reduce((s, p) => s + p.engagement, 0) / posts.length : 0;
   const grid: SlotStat[] = [...cells.values()].map((c) => ({
     weekday: c.weekday,
     hour: c.hour,
     posts: c.posts,
     avgEngagement: Math.round((c.total / c.posts) * 10) / 10,
+    score: Math.round(((c.total + SHRINK_POSTS * overall) / (c.posts + SHRINK_POSTS)) * 10) / 10,
   }));
   const recommended = WEEKDAYS.map((_, weekday) =>
     grid
       .filter((g) => g.weekday === weekday && g.posts >= minPosts)
-      .sort((a, b) => b.avgEngagement - a.avgEngagement || b.posts - a.posts)
+      .sort((a, b) => b.score - a.score || b.posts - a.posts)
       .slice(0, perDay)
       .map((g) => g.hour)
       .sort((a, b) => a - b)
   );
-  return { grid, recommended, sampleSize: posts.length };
+  return { grid, recommended, sampleSize: posts.length, overallAvg: Math.round(overall * 10) / 10 };
+}
+
+/**
+ * Follower growth over a period from the daily TOTALS only: last total minus the
+ * first total on or after `fromDate`. Days without a real total are ignored.
+ */
+export function followerGrowth(rows: Array<{ date: string; followers: number | null }>, fromDate: string) {
+  const inPeriod = rows
+    .filter((r) => r.followers != null && r.date >= fromDate)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (!inPeriod.length) {
+    return { followers: null, followersChange: null, followersChangePct: null, trackingSince: null, followersDaily: [] };
+  }
+  const first = inPeriod[0].followers as number;
+  const last = inPeriod[inPeriod.length - 1].followers as number;
+  const change = inPeriod.length > 1 ? last - first : null;
+  return {
+    followers: last,
+    followersChange: change,
+    followersChangePct: change != null && first > 0 ? Math.round((change / first) * 1000) / 10 : null,
+    trackingSince: inPeriod[0].date,
+    followersDaily: inPeriod.map((r) => ({ date: r.date, followers: r.followers as number })),
+  };
 }
 
 const csvCell = (v: unknown) => {
@@ -122,7 +158,10 @@ export class BoltAnalyticsQueries {
         row.impressions += p.impressions;
         daily.set(d, row);
       }
-      const f = followers.filter((r) => r.integrationId === ch.id && r.followers != null);
+      const growth = followerGrowth(
+        followers.filter((r) => r.integrationId === ch.id),
+        dayKey(from)
+      );
       return {
         integration: ch,
         posts: cur.length,
@@ -130,11 +169,9 @@ export class BoltAnalyticsQueries {
         engagement: sum(cur, 'engagement'),
         avgEngagement: cur.length ? Math.round((sum(cur, 'engagement') / cur.length) * 10) / 10 : 0,
         previous: { posts: prev.length, impressions: sum(prev, 'impressions'), engagement: sum(prev, 'engagement') },
-        followers: f.length ? f[f.length - 1].followers : null,
-        followersChange: f.length > 1 ? (f[f.length - 1].followers || 0) - (f[0].followers || 0) : null,
+        ...growth,
         synced: cur.filter((p) => p.lastSyncedAt).length,
         daily: [...daily.values()].sort((a, b) => a.date.localeCompare(b.date)),
-        followersDaily: f.map((r) => ({ date: r.date, followers: r.followers })),
       };
     });
   }
@@ -176,6 +213,23 @@ export class BoltAnalyticsQueries {
       select: { publishedAt: true, engagement: true },
     });
     return { timeZone, ...bestTimes(posts, timeZone) };
+  }
+
+  /** One row per channel per day with a real follower total. */
+  async followersCsv(organizationId: string, days: number) {
+    const channels = new Map((await this.channels(organizationId)).map((c) => [c.id, c]));
+    const rows = await this._prisma.analyticsChannelDaily.findMany({
+      where: { organizationId, followers: { not: null }, date: { gte: dayKey(dayjs().subtract(days, 'day').toDate()) } },
+      orderBy: [{ date: 'asc' }, { integrationId: 'asc' }],
+      select: { integrationId: true, date: true, followers: true },
+    });
+    const lines = rows
+      .filter((r) => channels.has(r.integrationId))
+      .map((r) => {
+        const ch = channels.get(r.integrationId)!;
+        return [r.date, ch.name, ch.providerIdentifier, r.followers].map(csvCell).join(',');
+      });
+    return ['date,channel,platform,followers', ...lines].join('\n') + '\n';
   }
 
   async csv(organizationId: string, days: number) {

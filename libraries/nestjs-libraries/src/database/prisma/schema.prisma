@@ -219,6 +219,19 @@ model AnalyticsBackfill {
   updatedAt     DateTime @updatedAt
 }
 
+/// Bolt Advantage: a channel's posting queue. Slots are local wall-clock times
+/// per weekday in `timeZone`, so 9:00 stays 9:00 across daylight saving.
+model ChannelQueue {
+  integrationId  String   @id
+  organizationId String
+  timeZone       String
+  slots          String   @default("[]")
+  paused         Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+}
+
 model UsedCodes {
   id           String       @id @default(uuid())
   code         String
