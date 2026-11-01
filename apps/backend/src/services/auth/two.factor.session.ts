@@ -37,8 +37,22 @@ export function userIdFromJwt(jwt: string): string {
   return (AuthChecker.verifyJWT(jwt) as { id: string }).id;
 }
 
+/**
+ * In NOT_SECURED mode the frontend saves `auth` itself as a host-only cookie.
+ * If NOT_SECURED is later turned off, that copy outlives every server-set one,
+ * and because browsers send it first it shadows the real session. Once 2FA
+ * rejects it the app reloads forever, so clear it whenever we set or drop auth.
+ */
+export function clearHostOnlyAuthCookie(response: Response) {
+  if (process.env.NOT_SECURED) {
+    return;
+  }
+  response.cookie('auth', '', { path: '/', expires: new Date(0) });
+}
+
 /** Same cookie the stock login sets. */
 export function setAuthCookie(response: Response, jwt: string) {
+  clearHostOnlyAuthCookie(response);
   response.cookie('auth', jwt, {
     domain: getCookieUrlFromDomain(process.env.FRONTEND_URL!),
     ...(!process.env.NOT_SECURED
