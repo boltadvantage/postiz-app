@@ -7,6 +7,7 @@ import { IntegrationManager } from '@gitroom/nestjs-libraries/integrations/integ
 import { RefreshIntegrationService } from '@gitroom/nestjs-libraries/integrations/refresh.integration.service';
 import { stripHtmlValidation } from '@gitroom/helpers/utils/strip.html.validation';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+import { isLocked, withLock } from '@gitroom/nestjs-libraries/redis/bolt.lock';
 import { fromAnalyticsData, MetricMap, summarize } from '@gitroom/nestjs-libraries/bolt-analytics/metrics';
 import { BACKFILL_DAYS, STOP_AFTER_DAYS, byPriority, dayKey, isDue } from '@gitroom/nestjs-libraries/bolt-analytics/schedule';
 import { X_HISTORY_READS, X_USER_READ_COST, XAnalytics } from '@gitroom/nestjs-libraries/bolt-analytics/x.analytics';
@@ -41,11 +42,7 @@ export class BoltAnalyticsService {
 
   /** Runs one sync pass. Returns false if another pass is already running. */
   async syncAll(organizationId?: string) {
-    const locked = await ioRedis.set(LOCK_KEY, new Date().toISOString(), 'EX', 3 * 3600, 'NX');
-    if (!locked) {
-      return false;
-    }
-    try {
+    const ran = await withLock(LOCK_KEY, async () => {
       const integrations = await this._prisma.integration.findMany({
         where: {
           deletedAt: null,
@@ -66,13 +63,12 @@ export class BoltAnalyticsService {
       }
       await ioRedis.set(LAST_RUN_KEY, new Date().toISOString());
       return true;
-    } finally {
-      await ioRedis.del(LOCK_KEY);
-    }
+    });
+    return ran === true;
   }
 
   isRunning() {
-    return ioRedis.get(LOCK_KEY).then((v) => !!v);
+    return isLocked(LOCK_KEY);
   }
 
   async syncIntegration(integration: Integration) {

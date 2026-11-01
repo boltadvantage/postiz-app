@@ -5,6 +5,7 @@ import { Integration } from '@prisma/client';
 import dayjs from 'dayjs';
 import { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+import { isLocked, withLock } from '@gitroom/nestjs-libraries/redis/bolt.lock';
 import { INBOX_PROVIDERS, InboxService } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
 import { NostrInbox, secretKeyFromHex } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.inbox';
 import { DmProtocol, NostrDms } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.dm';
@@ -43,9 +44,7 @@ export class DmService {
   // ---------- sync ----------
 
   async syncAll(organizationId?: string, force = false) {
-    const locked = await ioRedis.set(LOCK_KEY, '1', 'EX', 1800, 'NX');
-    if (!locked) return false;
-    try {
+    const ran = await withLock(LOCK_KEY, async () => {
       const integrations = await this._prisma.integration.findMany({
         where: {
           deletedAt: null,
@@ -66,13 +65,12 @@ export class DmService {
         }
       }
       return true;
-    } finally {
-      await ioRedis.del(LOCK_KEY);
-    }
+    });
+    return ran === true;
   }
 
   isRunning() {
-    return ioRedis.get(LOCK_KEY).then((v) => !!v);
+    return isLocked(LOCK_KEY);
   }
 
   /** Save messages we don't have yet; muted people's messages are never saved. */
