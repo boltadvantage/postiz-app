@@ -32,7 +32,9 @@ type Suggestions = {
 // Monday first, like most calendars
 const DAYS = [1, 2, 3, 4, 5, 6, 0];
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const label = (m: number) => `${((Math.floor(m / 60) + 11) % 12) + 1}:${String(m % 60).padStart(2, '0')} ${m < 720 ? 'AM' : 'PM'}`;
+// compact: "9 AM", "1:30 PM" (day columns are narrow)
+const label = (m: number) =>
+  `${((Math.floor(m / 60) + 11) % 12) + 1}${m % 60 ? `:${String(m % 60).padStart(2, '0')}` : ''} ${m < 720 ? 'AM' : 'PM'}`;
 const toMinute = (hhmm: string) => {
   const [h, m] = hhmm.split(':').map(Number);
   return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
@@ -223,7 +225,7 @@ const Editor: FC<{ row: QueueRow; onSaved: () => void }> = ({ row, onSaved }) =>
                 <span className="text-[11px] text-textItemBlur">{mine.length || ''}</span>
               </div>
               {mine.map((s) => (
-                <div key={s.minute} className="group flex items-center justify-between rounded-[6px] bg-[#612BD3]/90 text-white px-[8px] h-[28px] text-[12px]">
+                <div key={s.minute} className="group flex items-center justify-between gap-[4px] rounded-[6px] bg-[#612BD3]/90 text-white px-[8px] h-[28px] text-[12px] whitespace-nowrap">
                   {label(s.minute)}
                   <button type="button" onClick={() => remove(s)} aria-label={t('remove', 'Remove')} className="opacity-60 hover:opacity-100">
                     ×
@@ -236,10 +238,10 @@ const Editor: FC<{ row: QueueRow; onSaved: () => void }> = ({ row, onSaved }) =>
                   key={`s${s.minute}`}
                   onClick={() => add(s)}
                   title={t('suggestion_tooltip', '{{avg}} avg engagement over {{n}} posts', { avg: s.avgEngagement, n: s.posts })}
-                  className="flex items-center justify-between rounded-[6px] border border-dashed border-[#8A63E8] px-[8px] h-[28px] text-[12px] text-start"
+                  className="flex items-center justify-between gap-[4px] rounded-[6px] border border-dashed border-[#8A63E8] px-[6px] h-[28px] text-[12px] text-start whitespace-nowrap overflow-hidden"
                 >
-                  <span>+ {label(s.minute)}</span>
-                  {s.lift > 0 && <span className="text-[11px] text-green-400">+{Math.round(s.lift * 100)}%</span>}
+                  <span className="truncate">+{label(s.minute)}</span>
+                  {s.lift > 0 && <span className="text-[10px] text-green-400 shrink-0">+{Math.round(s.lift * 100)}%</span>}
                 </button>
               ))}
               <AddTime onAdd={(minute) => add({ day, minute })} />
