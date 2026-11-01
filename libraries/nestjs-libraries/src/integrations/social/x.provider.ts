@@ -455,7 +455,9 @@ export class XProvider extends SocialAbstract implements SocialProvider {
         (process.env.X_URL || process.env.FRONTEND_URL) +
           `/integrations/social/x`,
         {
-          authAccessType: 'write',
+          // Bolt Advantage: no authAccessType, so X grants the app's own
+          // permission level ("Read and write and Direct message" for inbox
+          // DMs). 'write' capped every connection below DM access.
           linkMode: 'authenticate',
           forceLogin: false,
         }
