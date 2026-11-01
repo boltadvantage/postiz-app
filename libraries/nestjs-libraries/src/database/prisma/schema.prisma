@@ -142,6 +142,15 @@ model UserTwoFactor {
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+/// Bolt Advantage: channel types an organization hid from the Add Channel screen.
+model HiddenProvider {
+  organizationId String
+  identifier     String
+  createdAt      DateTime @default(now())
+
+  @@id([organizationId, identifier])
+}
+
 model UsedCodes {
   id           String       @id @default(uuid())
   code         String
