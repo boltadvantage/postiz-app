@@ -233,6 +233,10 @@ export const History = () => {
         >
           {status?.running ? t('syncing', 'Syncing…') : t('sync_now', 'Sync now')}
         </button>
+        {/* Bolt Advantage: what each client cost, for invoicing */}
+        <a href="/costs" className="px-[14px] h-[34px] rounded-[8px] border border-newTableBorder text-[14px] flex items-center whitespace-nowrap">
+          {t('client_costs', 'Client costs')}
+        </a>
         <a
           href={`${backendUrl}/bolt-analytics/followers.csv?days=365`}
           className="px-[14px] h-[34px] rounded-[8px] border border-newTableBorder text-[14px] flex items-center whitespace-nowrap"

@@ -317,6 +317,25 @@ model InboxCursor {
   updatedAt     DateTime  @updatedAt
 }
 
+/// Bolt Advantage: metered API use per channel per day (X reads and posts),
+/// for client cost reports. Kept for removed channels too, so past months
+/// can still be invoiced.
+model BoltChannelUsage {
+  id             String   @id @default(cuid())
+  organizationId String
+  integrationId  String
+  provider       String
+  /// history | inbox | dm | write
+  kind           String
+  /// YYYY-MM-DD (UTC)
+  date           String
+  units          Int      @default(0)
+  updatedAt      DateTime @updatedAt
+
+  @@unique([integrationId, provider, kind, date])
+  @@index([organizationId, date])
+}
+
 /// Bolt Advantage: a one-to-one direct-message conversation on a channel.
 model InboxConversation {
   id             String    @id @default(cuid())

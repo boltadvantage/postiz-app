@@ -13,6 +13,7 @@ import { X_INBOX_READS, X_INBOX_USAGE } from '@gitroom/nestjs-libraries/bolt-ana
 import { dayKey } from '@gitroom/nestjs-libraries/bolt-analytics/schedule';
 import { buildQuote, buildReply, buildRepost, InboxKind, NostrInbox } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.inbox';
 import { XInbox } from '@gitroom/nestjs-libraries/bolt-inbox/x.inbox';
+import { recordChannelUsage, UsageKind } from '@gitroom/nestjs-libraries/bolt-costs/usage';
 
 export const INBOX_PROVIDERS = ['nostr', 'x'];
 const LOCK_KEY = 'bolt-inbox:lock';
@@ -165,7 +166,9 @@ export class InboxService {
     return Math.max(0, X_INBOX_READS() - (row?.reads || 0));
   }
 
-  addUsage(provider: string, n: number) {
+  /** Count against the install-wide cap, and (with a channel) on that channel's cost ledger. */
+  async addUsage(provider: string, n: number, channel?: { integration: Integration; kind: UsageKind }) {
+    if (channel) await recordChannelUsage(this._prisma, channel.integration, channel.kind, n);
     return this._prisma.analyticsApiUsage.upsert({
       where: { provider_date: { provider, date: dayKey() } },
       create: { provider, date: dayKey(), reads: n },
@@ -191,7 +194,7 @@ export class InboxService {
       max: Math.min(100, Math.floor(budget / 2)),
       firstRunDays: X_FIRST_RUN_DAYS,
     });
-    await this.addUsage(X_INBOX_USAGE, Math.max(1, page.reads));
+    await this.addUsage(X_INBOX_USAGE, Math.max(1, page.reads), { integration, kind: 'inbox' });
     const muted = await this.mutedAuthors(integration.organizationId, 'x');
     for (const m of page.items.filter((i) => !muted.has(i.author.id))) {
       await this.upsertPerson(integration.organizationId, 'x', m.author.id, m.author);
@@ -349,7 +352,7 @@ export class InboxService {
       if (action === 'reply') externalId = await x.reply(item.externalId, clean);
       if (action === 'quote') externalId = await x.quote(item.externalId, clean);
       if (action === 'repost') await x.repost(integration.internalId, item.externalId);
-      await this.addUsage('x-write', 1);
+      await this.addUsage('x-write', 1, { integration, kind: 'write' });
     } else {
       throw new Error('This channel does not support that yet');
     }

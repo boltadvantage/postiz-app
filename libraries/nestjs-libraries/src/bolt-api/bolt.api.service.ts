@@ -1,6 +1,6 @@
 // Bolt Advantage: one place that shapes Bolt features (inbox, messages,
 // people, queue, pause, saved analytics) for outside callers — the MCP tools
-// AI agents use and the API-key public API — so both always match.
+// AI agents use and the API-key public API — so both always match. Also client costs.
 import { Injectable } from '@nestjs/common';
 import { InboxService } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
 import { DmService } from '@gitroom/nestjs-libraries/bolt-inbox/dm.service';
@@ -8,6 +8,7 @@ import { QueueService } from '@gitroom/nestjs-libraries/bolt-queue/queue.service
 import { PauseService } from '@gitroom/nestjs-libraries/bolt-queue/pause.service';
 import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
 import { BoltAnalyticsQueries } from '@gitroom/nestjs-libraries/bolt-analytics/bolt-analytics.queries';
+import { CostsService } from '@gitroom/nestjs-libraries/bolt-costs/costs.service';
 
 export type BoltStatus = 'open' | 'unread' | 'archived' | 'all';
 const STATUSES: BoltStatus[] = ['open', 'unread', 'archived', 'all'];
@@ -37,8 +38,16 @@ export class BoltApiService {
     private _queue: QueueService,
     private _pause: PauseService,
     private _posts: PostsService,
-    private _analytics: BoltAnalyticsQueries
+    private _analytics: BoltAnalyticsQueries,
+    private _costs: CostsService
   ) {}
+
+  // ---------- client costs ----------
+
+  /** Metered API use and estimated cost per client and channel, inclusive YYYY-MM-DD range (default: this month). */
+  costs(orgId: string, from?: string, to?: string) {
+    return this._costs.report(orgId, from, to);
+  }
 
   // ---------- inbox (mentions, replies, quotes) ----------
 

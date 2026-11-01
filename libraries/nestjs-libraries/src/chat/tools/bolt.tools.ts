@@ -334,6 +334,31 @@ Saved analytics history (kept by Postiz every 6 hours, up to a year):
   }
 }
 
+@Injectable()
+export class BoltCostsTool implements AgentToolInterface {
+  constructor(private _api: BoltApiService) {}
+  name = 'boltCostsTool';
+  optionalOnSelfHosted = true;
+  run() {
+    return createTool({
+      id: 'boltCostsTool',
+      mcp: read('Client Costs (metered API use)'),
+      description: `
+What each client cost in metered API use (X reads and posts) over a date range, for invoicing.
+Clients are Postiz customers/groups (a channel is put in one from its menu: "Move / add to group"); channels without one are listed under a client with an empty name.
+Per channel: reads for history (saved stats, followers), inbox (mentions), dm (direct messages), and write (replies, reposts, quotes, messages sent), with an estimated USD cost at the listed prices.
+Costs are estimates; the X developer console has the real bill. "trackingSince" is when per-channel tracking started - nothing before it is included.
+`,
+      inputSchema: z.object({
+        from: z.string().optional().describe('First day, YYYY-MM-DD (default: first of this month)'),
+        to: z.string().optional().describe('Last day, YYYY-MM-DD, inclusive (default: today)'),
+      }),
+      outputSchema,
+      execute: async (input, context) => run(() => this._api.costs(orgId(input, context), input.from, input.to)),
+    });
+  }
+}
+
 export const boltTools = [
   BoltInboxListTool,
   BoltInboxRespondTool,
@@ -346,4 +371,5 @@ export const boltTools = [
   BoltQueueUpdateTool,
   BoltPostingPauseTool,
   BoltAnalyticsTool,
+  BoltCostsTool,
 ];
