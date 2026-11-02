@@ -206,8 +206,17 @@ model AnalyticsApiUsage {
   provider String
   date     String
   reads    Int    @default(0)
+  /// Bolt Advantage: estimated dollars at X's prices, after X's same-day de-duplication
+  usd      Float  @default(0)
 
   @@id([provider, date])
+}
+
+/// Bolt Advantage: install-wide settings an admin can change in Settings (e.g. the X budget).
+model BoltSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }
 
 /// Bolt Advantage: per-channel backfill progress so imports resume across runs.
@@ -331,6 +340,8 @@ model BoltChannelUsage {
   /// YYYY-MM-DD (UTC)
   date           String
   units          Int      @default(0)
+  /// dollars at X's prices; rows with provider "x" predate this and are priced from units
+  usd            Float    @default(0)
   updatedAt      DateTime @updatedAt
 
   @@unique([integrationId, provider, kind, date])

@@ -2,6 +2,7 @@
 // and replying, reposting, quoting and liking.
 import { TwitterApi } from 'twitter-api-v2';
 import type { InboxKind } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.inbox';
+import type { XResources } from '@gitroom/nestjs-libraries/bolt-costs/x-billing';
 
 export type IncomingX = {
   id: string;
@@ -13,8 +14,8 @@ export type IncomingX = {
   targetText: string | null;
 };
 
-/** One mentions page → inbox items, plus how many billable items X returned. */
-export function parseMentions(res: any) {
+/** One mentions page → inbox items, plus what X returned (for billing). `self` = the channel's X user id. */
+export function parseMentions(res: any, self?: string) {
   const users = new Map<string, any>((res?.includes?.users || []).map((u: any) => [u.id, u]));
   const tweets = new Map<string, any>((res?.includes?.tweets || []).map((t: any) => [t.id, t]));
   const items: IncomingX[] = (res?.data || []).map((t: any) => {
@@ -33,8 +34,15 @@ export function parseMentions(res: any) {
       targetText: target ? tweets.get(target.id)?.text || null : null,
     } as IncomingX;
   });
-  const reads = (res?.data?.length || 0) + (res?.includes?.users?.length || 0) * 2 + (res?.includes?.tweets?.length || 0);
-  return { items, reads, newestId: res?.meta?.newest_id as string | undefined };
+  const resources: XResources = {
+    // your mentions are your own data; posts they point at are yours when you wrote them
+    posts: [
+      ...(res?.data || []).map((t: any) => ({ id: t.id, own: true })),
+      ...(res?.includes?.tweets || []).map((t: any) => ({ id: t.id, own: !!self && t.author_id === self })),
+    ],
+    users: (res?.includes?.users || []).map((u: any) => ({ id: u.id, own: !!self && u.id === self })),
+  };
+  return { items, resources, newestId: res?.meta?.newest_id as string | undefined };
 }
 
 export class XInbox {
@@ -58,10 +66,10 @@ export class XInbox {
         ? { since_id: opts.sinceId }
         : { start_time: new Date(Date.now() - (opts.firstRunDays ?? 7) * 86400000).toISOString() }),
       expansions: ['author_id', 'referenced_tweets.id'],
-      'tweet.fields': ['created_at', 'conversation_id', 'referenced_tweets', 'text'],
+      'tweet.fields': ['created_at', 'conversation_id', 'referenced_tweets', 'text', 'author_id'],
       'user.fields': ['username', 'name', 'profile_image_url'],
     });
-    return parseMentions(res.data ? { data: res.data.data, includes: res.data.includes, meta: res.data.meta } : res);
+    return parseMentions(res.data ? { data: res.data.data, includes: res.data.includes, meta: res.data.meta } : res, userId);
   }
 
   async reply(tweetId: string, text: string) {
@@ -91,6 +99,9 @@ export type XDm = {
   createdAt: Date;
   conversationId: string;
 };
+
+/** DM page sizes once there's a cursor: peek at one, then widen while it's all new. */
+const DM_PAGE_STEPS = [1, 5, 20, 100];
 
 /** Newer-than for X ids (snowflakes, too big for Number). */
 export const xIdAfter = (a: string, b?: string | null) => !b || BigInt(a) > BigInt(b);
@@ -126,9 +137,13 @@ export function parseDmEvents(res: any, self: string, afterId?: string | null) {
     [...users.values()].map((u) => [u.id, { id: u.id, handle: u.username, name: u.name, avatar: u.profile_image_url }])
   );
   const reads = (res?.data?.length || 0) + (res?.includes?.users?.length || 0);
+  const resources: XResources = {
+    dms: (res?.data || []).map((e: any) => e.id),
+    users: (res?.includes?.users || []).map((u: any) => ({ id: u.id })),
+  };
   // newest event of any kind (group chats included), so the cursor moves past it
   const newestId = (res?.data?.[0]?.id as string | undefined) || undefined;
-  return { messages, people, reads, reachedKnown, newestId, nextToken: res?.meta?.next_token as string | undefined };
+  return { messages, people, reads, resources, reachedKnown, newestId, nextToken: res?.meta?.next_token as string | undefined };
 }
 
 /** X answers 403 when the app or the connection lacks Direct Message permission. */
@@ -150,34 +165,42 @@ export class XDms {
   /**
    * Newest-first pages until we reach what we already have, run out of budget, or pass `oldest`.
    * X has no "newer than" filter for DMs and bills every event it returns, so with a
-   * cursor the first page is a single event: if that one is known, the check costs ~2 reads.
+   * cursor the pages grow 1, 5, 20…: a quiet check reads one event, and a couple of
+   * new messages cost a handful of events instead of a full page.
+   * `budget` is in items returned (events + profiles).
    */
   async since(self: string, opts: { afterId?: string | null; budget: number; oldest: Date }) {
     const messages: XDm[] = [];
     const people = new Map<string, { id: string; handle?: string; name?: string; avatar?: string }>();
+    const resources: Required<Pick<XResources, 'dms' | 'users'>> = { dms: [], users: [] };
     let reads = 0;
+    let pageNo = 0;
     let token: string | undefined;
     let newestId: string | undefined;
     while (reads < opts.budget) {
-      const peek = !!opts.afterId && !token;
+      const left = Math.max(1, opts.budget - reads);
+      const size = opts.afterId ? Math.min(DM_PAGE_STEPS[Math.min(pageNo, DM_PAGE_STEPS.length - 1)], left) : Math.min(100, left);
       const res = await this.client.v2.get('dm_events', {
-        max_results: peek ? 1 : Math.min(100, Math.max(1, opts.budget - reads)),
+        max_results: size,
         event_types: 'MessageCreate',
         'dm_event.fields': 'id,text,event_type,dm_conversation_id,created_at,sender_id',
         expansions: 'sender_id',
         'user.fields': 'username,name,profile_image_url',
         ...(token ? { pagination_token: token } : {}),
       });
+      pageNo++;
       const page = parseDmEvents(res, self, opts.afterId);
       newestId = newestId || page.newestId;
       reads += Math.max(1, page.reads);
+      resources.dms.push(...(page.resources.dms || []));
+      resources.users.push(...(page.resources.users || []));
       messages.push(...page.messages);
       page.people.forEach((v, k) => people.set(k, v));
       const oldestOnPage = page.messages[page.messages.length - 1]?.createdAt;
       token = page.nextToken;
       if (page.reachedKnown || !token || (oldestOnPage && oldestOnPage < opts.oldest)) break;
     }
-    return { messages: messages.filter((m) => m.createdAt >= opts.oldest), people, reads, newestId };
+    return { messages: messages.filter((m) => m.createdAt >= opts.oldest), people, reads, resources, newestId };
   }
 
   async send(peerId: string, text: string) {

@@ -1,11 +1,12 @@
+jest.mock('@gitroom/nestjs-libraries/redis/redis.service', () => ({ ioRedis: {} }));
 import { CostsService, costRange } from './costs.service';
 
 const usageRows = [
-  { integrationId: 'x1', kind: 'history', units: 100, date: '2026-11-01' },
-  { integrationId: 'x1', kind: 'inbox', units: 60, date: '2026-11-01' },
-  { integrationId: 'x1', kind: 'write', units: 3, date: '2026-11-02' },
-  { integrationId: 'x2', kind: 'inbox', units: 40, date: '2026-11-02' },
-  { integrationId: 'gone', kind: 'dm', units: 10, date: '2026-11-02' },
+  { provider: 'x', integrationId: 'x1', kind: 'history', units: 100, date: '2026-11-01' },
+  { provider: 'x', integrationId: 'x1', kind: 'inbox', units: 60, date: '2026-11-01' },
+  { provider: 'x', integrationId: 'x1', kind: 'write', units: 3, date: '2026-11-02' },
+  { provider: 'x', integrationId: 'x2', kind: 'inbox', units: 40, date: '2026-11-02' },
+  { provider: 'x', integrationId: 'gone', kind: 'dm', units: 10, date: '2026-11-02' },
 ];
 const channels = [
   { id: 'x1', name: 'Client A X', picture: null, providerIdentifier: 'x', deletedAt: null, customer: { id: 'cA', name: 'Client A', deletedAt: null } },
@@ -19,6 +20,8 @@ const prisma: any = {
     findFirst: jest.fn(async () => ({ date: '2026-11-01' })),
   },
   integration: { findMany: jest.fn(async () => channels) },
+  boltSetting: { findUnique: jest.fn(async () => null) },
+  analyticsApiUsage: { findMany: jest.fn(async () => [{ provider: 'x-inbox', usd: 0.25 }]) },
 };
 
 describe('client costs', () => {
@@ -65,6 +68,15 @@ describe('client costs', () => {
     const daily = (await svc.csv('org', '2026-11-01', '2026-11-30', true)).body;
     expect(daily).toContain('Client A,Client A X,x,2026-11-01,100,60,0,0,0.8000');
     expect(daily).toContain('Client A,Client A X,x,2026-11-02,0,0,0,3,0.0300');
+  });
+
+  it('uses the dollars on newer rows instead of pricing their units', async () => {
+    const rows = [...usageRows, { provider: 'x-billed', integrationId: 'x3', kind: 'inbox', units: 50, usd: 0.07, date: '2026-11-03' }];
+    const p = { ...prisma, boltChannelUsage: { ...prisma.boltChannelUsage, findMany: jest.fn(async () => rows) } };
+    const r = await new CostsService(p).report('org', '2026-11-01', '2026-11-30');
+    expect(r.clients.find((c) => c.id === 'cB')!.cost).toBeCloseTo(0.07, 4);
+    expect(r.total.cost).toBeCloseTo(1.08 + 0.07, 4);
+    expect(r.xBudget.spentToday.inbox).toBeCloseTo(0.25, 4);
   });
 
   it('checks the date range', () => {

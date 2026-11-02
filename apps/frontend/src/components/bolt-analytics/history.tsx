@@ -46,9 +46,8 @@ type Status = {
   running: boolean;
   lastRun: string | null;
   savedPosts: number;
-  xReadsToday: number;
-  xDailyReads: number;
   xSpendToday: number;
+  xDailyUsd: number;
 };
 type Best = {
   timeZone: string;
@@ -259,10 +258,9 @@ export const History = () => {
           {' · '}
           {t('saved_posts', '{{n}} posts saved', { n: status.savedPosts })}
           {' · '}
-          {t('x_reads_today', 'X today: {{used}}/{{cap}} reads (${{spend}})', {
-            used: status.xReadsToday,
-            cap: status.xDailyReads,
+          {t('x_spend_today', 'X today: ${{spend}} of ${{cap}}', {
             spend: status.xSpendToday.toFixed(2),
+            cap: status.xDailyUsd.toFixed(2),
           })}
         </div>
       )}

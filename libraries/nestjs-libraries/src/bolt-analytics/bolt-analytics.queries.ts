@@ -5,7 +5,7 @@ import { csvCell } from '@gitroom/nestjs-libraries/bolt-analytics/csv';
 import { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 import { LAST_RUN_KEY, SUPPORTED_PROVIDERS } from '@gitroom/nestjs-libraries/bolt-analytics/bolt-analytics.service';
-import { X_DAILY_READS, X_INBOX_READS, X_INBOX_USAGE } from '@gitroom/nestjs-libraries/bolt-analytics/x.analytics';
+import { poolLimit, spentToday, xBudgetSettings } from '@gitroom/nestjs-libraries/bolt-costs/x-billing';
 import { dayKey } from '@gitroom/nestjs-libraries/bolt-analytics/schedule';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -123,23 +123,24 @@ export class BoltAnalyticsQueries {
   }
 
   async status(organizationId: string, running: boolean) {
-    const [lastRun, xReads, posts] = await Promise.all([
+    const [lastRun, spent, budget, posts] = await Promise.all([
       ioRedis.get(LAST_RUN_KEY),
-      this._prisma.analyticsApiUsage.findMany({ where: { provider: { in: ['x', X_INBOX_USAGE] }, date: dayKey() } }),
+      spentToday(this._prisma),
+      xBudgetSettings(this._prisma),
       this._prisma.analyticsPost.count({ where: { organizationId } }),
     ]);
+    const usd = (n: number) => Math.round(n * 100) / 100;
     return {
       running,
       lastRun,
       savedPosts: posts,
-      // History and inbox together, against the whole daily cap
-      xReadsToday: xReads.reduce((s, r) => s + r.reads, 0),
-      xDailyReads: X_DAILY_READS(),
-      xHistoryReadsToday: xReads.find((r) => r.provider === 'x')?.reads || 0,
-      xInboxReadsToday: xReads.find((r) => r.provider === X_INBOX_USAGE)?.reads || 0,
-      xInboxReads: X_INBOX_READS(),
-      // ~$0.005 per post read
-      xSpendToday: Math.round(xReads.reduce((s, r) => s + r.reads, 0) * 0.5) / 100,
+      // dollars at X's prices: History and the inbox together, against the whole daily budget
+      xSpendToday: usd(spent.total),
+      xDailyUsd: budget.dailyUsd,
+      xHistorySpendToday: usd(spent.history),
+      xHistoryUsd: poolLimit(budget, 'x'),
+      xInboxSpendToday: usd(spent.inbox),
+      xInboxUsd: poolLimit(budget, 'x-inbox'),
     };
   }
 

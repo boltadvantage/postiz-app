@@ -18,7 +18,7 @@ describe('x inbox', () => {
   beforeEach(() => (calls.length = 0));
 
   it('turns a mentions page into mention / reply / quote items with authors and context', () => {
-    const { items, reads, newestId } = parseMentions({
+    const { items, resources, newestId } = parseMentions({
       data: [
         { id: '1', author_id: 'u1', text: '@me hi', created_at: '2026-11-01T10:00:00Z' },
         { id: '2', author_id: 'u2', text: '@me nope', created_at: '2026-11-01T11:00:00Z', referenced_tweets: [{ type: 'replied_to', id: '900' }] },
@@ -29,10 +29,10 @@ describe('x inbox', () => {
           { id: 'u1', username: 'fan', name: 'A Fan', profile_image_url: 'https://pbs/a.jpg' },
           { id: 'u2', username: 'critic', name: 'A Critic' },
         ],
-        tweets: [{ id: '900', text: 'my post' }],
+        tweets: [{ id: '900', text: 'my post', author_id: 'me' }],
       },
       meta: { newest_id: '3' },
-    });
+    }, 'me');
     expect(items.map((i) => [i.id, i.kind, i.targetId])).toEqual([
       ['1', 'mention', null],
       ['2', 'reply', '900'],
@@ -41,8 +41,17 @@ describe('x inbox', () => {
     expect(items[1]).toMatchObject({ author: { id: 'u2', handle: 'critic' }, targetText: 'my post' });
     expect(items[2].targetText).toBeNull();
     expect(newestId).toBe('3');
-    // 3 posts + 2 users (2 reads each) + 1 referenced post
-    expect(reads).toBe(8);
+    // mentions are your own data; the post they replied to is yours too; the people aren't
+    expect(resources.posts).toEqual([
+      { id: '1', own: true },
+      { id: '2', own: true },
+      { id: '3', own: true },
+      { id: '900', own: true },
+    ]);
+    expect(resources.users).toEqual([
+      { id: 'u1', own: false },
+      { id: 'u2', own: false },
+    ]);
   });
 
   it('only asks for new mentions after the first run, and limits the first run to recent days', async () => {
@@ -92,6 +101,8 @@ describe('X direct messages', () => {
     ]);
     expect(r.people.get('555')).toMatchObject({ handle: 'fan', name: 'Fan' });
     expect(r.reads).toBe(5);
+    // every event returned is billed, group ones too
+    expect(r.resources.dms).toEqual(page.data.map((e: any) => e.id));
     expect(r.nextToken).toBe('abc');
   });
 
@@ -120,11 +131,12 @@ describe('X direct messages', () => {
       expect(r.reads).toBe(1);
     });
 
-    it('keeps reading past the peek when something new arrived', async () => {
+    it('keeps reading past the peek in small pages when something new arrived', async () => {
       dmPages.push({ data: [page.data[0]], includes: {}, meta: { next_token: 'n1' } });
       dmPages.push({ data: [page.data[1], page.data[2]], includes: page.includes, meta: { next_token: 'n2' } });
       const r = await dms().since(ME, { afterId: '1700', budget: 20, oldest });
-      expect(calls.map((c) => c[2].max_results)).toEqual([1, 19]);
+      expect(calls.map((c) => c[2].max_results)).toEqual([1, 5]);
+      expect(r.resources.dms).toEqual(['1900', '1800', '1700']);
       expect(calls[1][2].pagination_token).toBe('n1');
       expect(r.messages.map((m: any) => m.id)).toEqual(['1900', '1800']);
       expect(r.newestId).toBe('1900');
