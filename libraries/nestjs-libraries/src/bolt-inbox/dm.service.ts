@@ -10,14 +10,14 @@ import { INBOX_PROVIDERS, InboxService } from '@gitroom/nestjs-libraries/bolt-in
 import { NostrInbox, secretKeyFromHex } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.inbox';
 import { DmProtocol, NostrDms } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.dm';
 import { isDmPermissionError, XDms, xIdAfter } from '@gitroom/nestjs-libraries/bolt-inbox/x.inbox';
-import { X_INBOX_USAGE } from '@gitroom/nestjs-libraries/bolt-analytics/x.analytics';
+import { worstItem, xBudgetSettings } from '@gitroom/nestjs-libraries/bolt-costs/x-billing';
 
 const LOCK_KEY = 'bolt-dm:lock';
 const FIRST_RUN_DAYS = 14;
 const X_MIN_INTERVAL_MIN = 30;
 const X_MAX_READS_PER_RUN = 20;
 // left untouched by DM checks so mentions can always run
-const X_MENTIONS_RESERVE = 10;
+const X_MENTIONS_RESERVE_USD = 0.05;
 const X_DM_PERMISSION =
   'X needs Direct Message permission. In the X developer portal, set your app to "Read and write and Direct message", then reconnect X here.';
 const PAGE = 40;
@@ -158,8 +158,11 @@ export class DmService {
     const state = await this._inbox.cursor(cursorId);
     if (!force && state?.lastRunAt && dayjs().diff(state.lastRunAt, 'minute') < X_MIN_INTERVAL_MIN) return;
     // mentions come first; DMs take at most half of what's left of the inbox's share
-    const budget = Math.min(X_MAX_READS_PER_RUN, Math.floor(((await this._inbox.xBudgetLeft()) - X_MENTIONS_RESERVE) / 2));
-    if (budget < 3) return;
+    // dollars → items: half of what's left after keeping some for mentions, at the worst case per message
+    const { prices } = await xBudgetSettings(this._prisma);
+    const usd = ((await this._inbox.xBudgetLeft()) - X_MENTIONS_RESERVE_USD) / 2;
+    const budget = Math.min(X_MAX_READS_PER_RUN, Math.floor(usd / (worstItem(prices, 'dm') / 2)));
+    if (budget < 2) return;
     const x = new XDms(await this._inbox.token(integration));
     try {
       const res = await x.since(integration.internalId, {
@@ -167,7 +170,7 @@ export class DmService {
         budget,
         oldest: state?.cursor ? dayjs().subtract(30, 'day').toDate() : dayjs().subtract(FIRST_RUN_DAYS, 'day').toDate(),
       });
-      await this._inbox.addUsage(X_INBOX_USAGE, res.reads, { integration, kind: 'dm' });
+      await this._inbox.charge(integration, 'dm', 'x-inbox', res.resources);
       await this.store(
         integration,
         res.messages.map((m) => ({ externalId: m.id, peer: m.peer, direction: m.direction, text: m.text, sentAt: m.createdAt, protocol: null })),
@@ -180,7 +183,6 @@ export class DmService {
       await this._inbox.saveCursor(cursorId, { cursor: newest, error: null });
     } catch (err: any) {
       if (isDmPermissionError(err)) {
-        await this._inbox.addUsage(X_INBOX_USAGE, 1, { integration, kind: 'dm' });
         await this._inbox.saveCursor(cursorId, { cursor: state?.cursor || null, error: X_DM_PERMISSION });
         return;
       }
@@ -336,7 +338,7 @@ export class DmService {
         if (isDmPermissionError(err)) throw new Error(X_DM_PERMISSION);
         throw err;
       }
-      await this._inbox.addUsage('x-write', 1, { integration, kind: 'write' });
+      await this._inbox.charge(integration, 'write', 'x-write', { writes: 1 });
     } else {
       throw new Error('This channel does not support messages yet');
     }

@@ -344,7 +344,7 @@ export const Inbox = () => {
         </div>
         {counts?.xPaused && (
           <div className="px-[12px] py-[8px] rounded-[8px] border border-amber-500/40 bg-amber-500/10 text-[13px]">
-            {t('x_paused', "X paused: today's read limit is reached, so X isn't checked again until tomorrow. Nostr is still checked.")}
+            {t('x_paused_budget', "X paused: the inbox's share of today's X budget is used up, so X isn't checked again until it resets at midnight UTC. Nostr is still checked. You can raise it in Settings.")}
           </div>
         )}
         {view === 'messages' ? (

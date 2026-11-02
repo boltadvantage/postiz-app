@@ -10,8 +10,8 @@ import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 import { isLocked, withLock } from '@gitroom/nestjs-libraries/redis/bolt.lock';
 import { fromAnalyticsData, MetricMap, summarize } from '@gitroom/nestjs-libraries/bolt-analytics/metrics';
 import { BACKFILL_DAYS, STOP_AFTER_DAYS, byPriority, dayKey, isDue } from '@gitroom/nestjs-libraries/bolt-analytics/schedule';
-import { recordChannelUsage } from '@gitroom/nestjs-libraries/bolt-costs/usage';
-import { X_HISTORY_READS, X_USER_READ_COST, XAnalytics } from '@gitroom/nestjs-libraries/bolt-analytics/x.analytics';
+import { chargeX, xBudgetLeft, xBudgetSettings, XResources } from '@gitroom/nestjs-libraries/bolt-costs/x-billing';
+import { XAnalytics } from '@gitroom/nestjs-libraries/bolt-analytics/x.analytics';
 import { NostrAnalytics } from '@gitroom/nestjs-libraries/bolt-analytics/nostr.analytics';
 import {
   FollowerTotal,
@@ -158,12 +158,13 @@ export class BoltAnalyticsService {
       const x = new XAnalytics(token);
       let cursor = state?.cursor || undefined;
       while (true) {
-        const budget = await this.xBudgetLeft();
+        const budget = await this.xPostsLeft();
         if (budget < 5) {
           return; // continue tomorrow, cursor saved
         }
         const page = await x.timelinePage(integration.internalId, since, budget, cursor);
-        await this.addXReads(Math.max(page.posts.length, 1), integration);
+        // your own timeline is your own data
+        await this.chargeX(integration, { posts: page.posts.map((p) => ({ id: p.id, own: true })) });
         for (const p of page.posts) {
           const row = await this.upsertImported(integration, p.id, p.createdAt, `https://x.com/i/status/${p.id}`, p.text);
           await this.save(row.id, p.metrics);
@@ -214,13 +215,13 @@ export class BoltAnalyticsService {
 
     switch (integration.providerIdentifier) {
       case 'x': {
-        const budget = await this.xBudgetLeft();
-        const batch = due.slice(0, budget);
+        const batch = due.slice(0, await this.xPostsLeft());
         if (batch.length === 0) {
           return;
         }
         const metrics = await new XAnalytics(token).lookup(batch.map((b) => b.externalId));
-        await this.addXReads(batch.length, integration);
+        // a lookup by post id isn't an "owned" endpoint, so it's billed at the full post price
+        await this.chargeX(integration, { posts: Object.keys(metrics).map((id) => ({ id })) });
         for (const b of batch) {
           if (metrics[b.externalId]) {
             await this.save(b.id, metrics[b.externalId]);
@@ -307,11 +308,13 @@ export class BoltAnalyticsService {
   private async followerTotal(integration: Integration, token: string): Promise<FollowerTotal | 'skip'> {
     switch (integration.providerIdentifier) {
       case 'x': {
-        if ((await this.xBudgetLeft()) < X_USER_READ_COST) {
+        const { prices } = await xBudgetSettings(this._prisma);
+        if ((await xBudgetLeft(this._prisma, 'x')) < prices.user) {
           return 'skip';
         }
-        await this.addXReads(X_USER_READ_COST, integration);
-        return { followers: await new XAnalytics(token).followers() };
+        const followers = await new XAnalytics(token).followers();
+        await this.chargeX(integration, { users: [{ id: integration.internalId, own: true }] });
+        return { followers };
       }
       case 'nostr':
         return nostrFollowers(integration.internalId);
@@ -344,24 +347,15 @@ export class BoltAnalyticsService {
     });
   }
 
-  async xReadsToday() {
-    const row = await this._prisma.analyticsApiUsage.findUnique({
-      where: { provider_date: { provider: 'x', date: dayKey() } },
-    });
-    return row?.reads || 0;
+  /** How many more posts History can read today, at the full post price. */
+  private async xPostsLeft() {
+    const { prices } = await xBudgetSettings(this._prisma);
+    const left = await xBudgetLeft(this._prisma, 'x');
+    return prices.post > 0 ? Math.floor(left / prices.post) : 100;
   }
 
-  private async xBudgetLeft() {
-    return Math.max(0, X_HISTORY_READS() - (await this.xReadsToday()));
-  }
-
-  private async addXReads(reads: number, integration: Integration) {
-    await recordChannelUsage(this._prisma, integration, 'history', reads);
-    return this._prisma.analyticsApiUsage.upsert({
-      where: { provider_date: { provider: 'x', date: dayKey() } },
-      create: { provider: 'x', date: dayKey(), reads },
-      update: { reads: { increment: reads } },
-    });
+  private chargeX(integration: Integration, r: XResources) {
+    return chargeX(this._prisma, integration, 'history', 'x', r);
   }
 
   private plain(content: string | null) {

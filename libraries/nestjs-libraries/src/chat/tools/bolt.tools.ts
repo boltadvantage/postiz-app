@@ -346,7 +346,8 @@ export class BoltCostsTool implements AgentToolInterface {
       description: `
 What each client cost in metered API use (X reads and posts) over a date range, for invoicing.
 Clients are Postiz customers/groups (a channel is put in one from its menu: "Move / add to group"); channels without one are listed under a client with an empty name.
-Per channel: reads for history (saved stats, followers), inbox (mentions), dm (direct messages), and write (replies, reposts, quotes, likes, messages sent), with an estimated USD cost at the listed prices.
+Per channel: items billed for history (saved stats, followers), inbox (mentions), dm (direct messages), and write (replies, reposts, quotes, likes, messages sent), with the USD cost at X's per-item prices (each item billed once per UTC day; the app owner's own data at the cheaper owned price).
+"xBudget" is today's install-wide X budget (dailyUsd, inboxUsd, historyUsd) and what has been spent today; an admin changes it in Settings.
 Costs are estimates; the X developer console has the real bill. "trackingSince" is when per-channel tracking started - nothing before it is included.
 `,
       inputSchema: z.object({

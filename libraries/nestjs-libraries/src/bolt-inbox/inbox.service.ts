@@ -9,11 +9,10 @@ import { RefreshIntegrationService } from '@gitroom/nestjs-libraries/integration
 import { AuthService } from '@gitroom/helpers/auth/auth.service';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 import { isLocked, withLock } from '@gitroom/nestjs-libraries/redis/bolt.lock';
-import { X_INBOX_READS, X_INBOX_USAGE } from '@gitroom/nestjs-libraries/bolt-analytics/x.analytics';
-import { dayKey } from '@gitroom/nestjs-libraries/bolt-analytics/schedule';
 import { buildLike, buildQuote, buildReply, buildRepost, InboxKind, NostrInbox } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.inbox';
 import { XInbox } from '@gitroom/nestjs-libraries/bolt-inbox/x.inbox';
-import { recordChannelUsage, UsageKind } from '@gitroom/nestjs-libraries/bolt-costs/usage';
+import { UsageKind } from '@gitroom/nestjs-libraries/bolt-costs/usage';
+import { chargeX, hasLink, worstItem, xBudgetLeft, xBudgetSettings, XPool, XResources } from '@gitroom/nestjs-libraries/bolt-costs/x-billing';
 
 export const INBOX_PROVIDERS = ['nostr', 'x'];
 const LOCK_KEY = 'bolt-inbox:lock';
@@ -22,6 +21,8 @@ const X_FIRST_RUN_DAYS = 7;
 // X costs money per item read, so check it less often than Nostr
 const X_MIN_INTERVAL_MIN = 30;
 const PAGE = 50;
+/** Below this many dollars left for today, X checks wait for tomorrow. */
+export const X_MIN_CHECK_USD = 0.03;
 
 export type InboxFilters = {
   integrationIds?: string[];
@@ -166,28 +167,23 @@ export class InboxService {
     }
   }
 
-  async xBudgetLeft() {
-    const row = await this._prisma.analyticsApiUsage.findUnique({ where: { provider_date: { provider: X_INBOX_USAGE, date: dayKey() } } });
-    return Math.max(0, X_INBOX_READS() - (row?.reads || 0));
+  /** Dollars left of the inbox's share of today's X budget. */
+  xBudgetLeft() {
+    return xBudgetLeft(this._prisma, 'x-inbox');
   }
 
   /** True when the org has X connected and today's inbox share is spent, so X checks are skipped. */
   async xPaused(organizationId: string) {
-    if ((await this.xBudgetLeft()) >= 5) return false;
+    if ((await this.xBudgetLeft()) >= X_MIN_CHECK_USD) return false;
     const x = await this._prisma.integration.count({
       where: { organizationId, providerIdentifier: 'x', deletedAt: null, disabled: false, type: 'social' },
     });
     return x > 0;
   }
 
-  /** Count against the install-wide cap, and (with a channel) on that channel's cost ledger. */
-  async addUsage(provider: string, n: number, channel?: { integration: Integration; kind: UsageKind }) {
-    if (channel) await recordChannelUsage(this._prisma, channel.integration, channel.kind, n);
-    return this._prisma.analyticsApiUsage.upsert({
-      where: { provider_date: { provider, date: dayKey() } },
-      create: { provider, date: dayKey(), reads: n },
-      update: { reads: { increment: n } },
-    });
+  /** Price what X returned or what was sent, against today's budget and the channel's cost ledger. */
+  charge(integration: Integration, kind: UsageKind, pool: XPool, r: XResources) {
+    return chargeX(this._prisma, integration, kind, pool, r);
   }
 
   async token(integration: Integration) {
@@ -201,14 +197,15 @@ export class InboxService {
     const state = await this.cursor(integration.id);
     if (!force && state?.lastRunAt && dayjs().diff(state.lastRunAt, 'minute') < X_MIN_INTERVAL_MIN) return;
     const budget = await this.xBudgetLeft();
-    if (budget < 5) return; // out of the inbox's share for today; try again tomorrow
+    if (budget < X_MIN_CHECK_USD) return; // out of the inbox's share for today; try again tomorrow
+    const { prices } = await xBudgetSettings(this._prisma);
     const x = new XInbox(await this.token(integration));
     const page = await x.mentions(integration.internalId, {
       sinceId: state?.cursor || undefined,
-      max: Math.min(100, Math.floor(budget / 2)),
+      max: Math.min(100, Math.floor(budget / worstItem(prices, 'mention'))),
       firstRunDays: X_FIRST_RUN_DAYS,
     });
-    await this.addUsage(X_INBOX_USAGE, Math.max(1, page.reads), { integration, kind: 'inbox' });
+    await this.charge(integration, 'inbox', 'x-inbox', page.resources);
     const muted = await this.mutedAuthors(integration.organizationId, 'x');
     for (const m of page.items.filter((i) => !muted.has(i.author.id))) {
       await this.upsertPerson(integration.organizationId, 'x', m.author.id, m.author);
@@ -370,7 +367,8 @@ export class InboxService {
       if (action === 'quote') externalId = await x.quote(item.externalId, clean);
       if (action === 'repost') await x.repost(integration.internalId, item.externalId);
       if (action === 'like') await x.like(integration.internalId, item.externalId);
-      await this.addUsage('x-write', 1, { integration, kind: 'write' });
+      const link = (action === 'reply' || action === 'quote') && hasLink(clean);
+      await this.charge(integration, 'write', 'x-write', link ? { urlWrites: 1 } : { writes: 1 });
     } else {
       throw new Error('This channel does not support that yet');
     }

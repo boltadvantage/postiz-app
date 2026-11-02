@@ -18,7 +18,7 @@ type Client = { id: string | null; name: string; usage: Usage; cost: number; cha
 type Report = {
   from: string;
   to: string;
-  prices: { xRead: number; xWrite: number };
+  prices: { post: number; user: number; dm: number; owned: number; write: number; writeUrl: number };
   trackingSince: string | null;
   clients: Client[];
   total: { usage: Usage; cost: number };
@@ -159,9 +159,12 @@ export const Costs = () => {
 
           <div className="text-[12px] text-textItemBlur flex flex-col gap-[4px]">
             <span>
-              {t('costs_prices', 'Estimates at ${{read}} per X read and ${{write}} per post sent (a profile lookup counts as about 2 reads). Your X developer console has the actual bill.', {
-                read: data.prices.xRead,
-                write: data.prices.xWrite,
+              {t('costs_prices_v2', 'Estimated at X’s prices: ${{post}} a post, ${{user}} a profile, ${{dm}} a message, ${{owned}} for your own account’s data, ${{write}} per thing sent. Each item is billed once a day. Change the prices in Settings; your X developer console has the actual bill.', {
+                post: data.prices.post,
+                user: data.prices.user,
+                dm: data.prices.dm,
+                owned: data.prices.owned,
+                write: data.prices.write,
               })}
             </span>
             <span>
