@@ -141,7 +141,8 @@ export default withProvider({
   dto: XDto,
   maximumCharacters: (settings) => {
     if (settings?.[0]?.value) {
-      return 4000;
+      // Bolt Advantage: X Premium allows 25,000 characters
+      return 25000;
     }
     return 280;
   },
