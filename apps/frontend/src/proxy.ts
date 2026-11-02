@@ -48,6 +48,8 @@ export async function proxy(request: NextRequest) {
     nextUrl.pathname.startsWith('/p/') ||
     nextUrl.pathname.startsWith('/provider/') ||
     nextUrl.pathname.startsWith('/icons/') ||
+    // Bolt Advantage: public privacy policy for platform app reviews
+    nextUrl.pathname === '/privacy' ||
     // the consent screen of MCP / OAuth clients handles signed-out visitors
     // itself (sign in and come back, or connect a self-hosted instance)
     nextUrl.pathname.startsWith('/oauth/authorize')
