@@ -84,6 +84,16 @@ describe('nostr inbox: building events', () => {
     expect(verifyEvent(signed)).toBe(true);
     expect(() => secretKeyFromHex('nsec1notahexkey')).toThrow();
   });
+
+  it('reads an nsec key as the same account as its hex form', () => {
+    const sk = generateSecretKey();
+    const nsec = nip19.nsecEncode(sk);
+    expect(getPublicKey(secretKeyFromHex(nsec))).toBe(getPublicKey(sk));
+    expect(getPublicKey(secretKeyFromHex(`  ${nsec.toUpperCase()}\n`))).toBe(getPublicKey(sk));
+    expect(getPublicKey(secretKeyFromHex(Buffer.from(sk).toString('hex')))).toBe(getPublicKey(sk));
+    // an npub is not a private key
+    expect(() => secretKeyFromHex(nip19.npubEncode(getPublicKey(sk)))).toThrow();
+  });
 });
 
 describe('relay lists from Nostr events', () => {
