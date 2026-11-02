@@ -11,6 +11,7 @@ import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useVariables } from '@gitroom/react/helpers/variable.context';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
+import { ChannelAvatar } from '@gitroom/frontend/components/bolt-shared/channel.avatar';
 
 type Usage = { history: number; inbox: number; dm: number; write: number };
 type Channel = { integrationId: string; name: string; platform: string; picture: string | null; removed: boolean; usage: Usage; cost: number };
@@ -142,7 +143,7 @@ export const Costs = () => {
                           cost={ch.cost}
                           label={
                             <span className="flex items-center gap-[8px] ps-[16px]">
-                              <img src={ch.picture || `/icons/platforms/${ch.platform}.png`} className="w-[18px] h-[18px] rounded-full" alt="" />
+                              <ChannelAvatar picture={ch.picture} platform={ch.platform} size={24} />
                               <span className="truncate">{ch.name}</span>
                               {ch.removed && <span className="text-[11px] text-textItemBlur">({t('removed', 'removed')})</span>}
                             </span>

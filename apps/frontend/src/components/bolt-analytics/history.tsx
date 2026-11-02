@@ -12,6 +12,7 @@ import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useVariables } from '@gitroom/react/helpers/variable.context';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
+import { ChannelAvatar } from '@gitroom/frontend/components/bolt-shared/channel.avatar';
 dayjs.extend(relativeTime);
 
 type Channel = { id: string; name: string; picture: string | null; providerIdentifier: string };
@@ -283,11 +284,7 @@ export const History = () => {
               )}
             >
               <div className="flex items-center gap-[10px]">
-                <img
-                  src={s.integration.picture || `/icons/platforms/${s.integration.providerIdentifier}.png`}
-                  className="w-[32px] h-[32px] rounded-full"
-                  alt=""
-                />
+                <ChannelAvatar picture={s.integration.picture} platform={s.integration.providerIdentifier} />
                 <div className="flex-1 min-w-0">
                   <div className="truncate">{s.integration.name}</div>
                   <div className="text-[12px] text-textItemBlur">{s.integration.providerIdentifier}</div>
