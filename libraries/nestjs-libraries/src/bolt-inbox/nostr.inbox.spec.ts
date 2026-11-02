@@ -1,5 +1,5 @@
 import { generateSecretKey, getPublicKey, finalizeEvent, verifyEvent, nip19 } from 'nostr-tools';
-import { buildQuote, buildReply, buildRepost, classify, replyTarget, rootOf, secretKeyFromHex } from './nostr.inbox';
+import { buildLike, buildQuote, buildReply, buildRepost, classify, replyTarget, rootOf, secretKeyFromHex } from './nostr.inbox';
 
 const ME = 'a'.repeat(64);
 const FAN = 'b'.repeat(64);
@@ -56,6 +56,14 @@ describe('nostr inbox: building events', () => {
     expect(t.kind).toBe(6);
     expect(JSON.parse(t.content)).toEqual(target);
     expect(t.tags).toEqual([['e', target.id, 'wss://relay.example'], ['p', FAN]]);
+  });
+
+  it('like is a NIP-25 "+" reaction to the note and its author', () => {
+    const target = ev([['p', ME]]);
+    const t = buildLike(target, relays);
+    expect(t.kind).toBe(7);
+    expect(t.content).toBe('+');
+    expect(t.tags).toEqual([['e', target.id, 'wss://relay.example', FAN], ['p', FAN], ['k', '1']]);
   });
 
   it('quote links the note with nostr:nevent and a q tag', () => {

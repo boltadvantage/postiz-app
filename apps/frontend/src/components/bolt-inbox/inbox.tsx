@@ -1,7 +1,7 @@
 'use client';
 
 // Bolt Advantage: inbox — mentions, replies and quotes across channels, with
-// private tags and mutes per person, and reply / quote / repost in place,
+// private tags and mutes per person, and reply / quote / repost / like in place,
 // plus direct messages (see messages.tsx).
 import React, { FC, useCallback, useMemo, useState } from 'react';
 import useSWR from 'swr';
@@ -31,6 +31,7 @@ type Item = {
   repliedAt: string | null;
   repostedAt: string | null;
   quotedAt: string | null;
+  likedAt: string | null;
   person: Person | null;
 };
 
@@ -88,7 +89,7 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
   const [busy, setBusy] = useState(false);
   const p = item.person;
 
-  const act = async (action: 'reply' | 'quote' | 'repost', text?: string) => {
+  const act = async (action: 'reply' | 'quote' | 'repost' | 'like', text?: string) => {
     setBusy(true);
     const res = await fetch(`/inbox/${item.id}/${action}`, { method: 'POST', body: JSON.stringify({ text }) });
     setBusy(false);
@@ -96,7 +97,7 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
       const body = await res.json().catch(() => ({}));
       return toaster.show(body?.message || t('could_not_send', 'Could not send'), 'warning');
     }
-    toaster.show(action === 'reply' ? t('reply_sent', 'Reply sent') : action === 'quote' ? t('quote_sent', 'Quote posted') : t('reposted', 'Reposted'), 'success');
+    toaster.show(action === 'reply' ? t('reply_sent', 'Reply sent') : action === 'quote' ? t('quote_sent', 'Quote posted') : action === 'like' ? t('liked', 'Liked') : t('reposted', 'Reposted'), 'success');
     setOpen(null);
     refresh();
   };
@@ -136,6 +137,9 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
             </button>
             <button type="button" onClick={() => setOpen(open === 'quote' ? null : 'quote')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder">
               {t('quote', 'Quote')}{item.quotedAt ? ' ✓' : ''}
+            </button>
+            <button type="button" disabled={busy || !!item.likedAt} onClick={() => act('like')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder disabled:opacity-50">
+              {item.likedAt ? `♥ ${t('liked', 'Liked')}` : `♡ ${t('like', 'Like')}`}
             </button>
             <button type="button" disabled={busy || !!item.repostedAt} onClick={() => act('repost')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder disabled:opacity-50">
               {item.repostedAt ? t('reposted', 'Reposted') : t('repost', 'Repost')}

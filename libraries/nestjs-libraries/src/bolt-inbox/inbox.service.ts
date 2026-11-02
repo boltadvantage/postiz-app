@@ -1,5 +1,5 @@
 // Bolt Advantage: the inbox — collects mentions, replies and quotes per channel,
-// keeps private tags/mutes per person, and replies, reposts or quotes.
+// keeps private tags/mutes per person, and replies, reposts, quotes or likes.
 import { Injectable, Logger } from '@nestjs/common';
 import { Integration } from '@prisma/client';
 import dayjs from 'dayjs';
@@ -11,7 +11,7 @@ import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 import { isLocked, withLock } from '@gitroom/nestjs-libraries/redis/bolt.lock';
 import { X_INBOX_READS, X_INBOX_USAGE } from '@gitroom/nestjs-libraries/bolt-analytics/x.analytics';
 import { dayKey } from '@gitroom/nestjs-libraries/bolt-analytics/schedule';
-import { buildQuote, buildReply, buildRepost, InboxKind, NostrInbox } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.inbox';
+import { buildLike, buildQuote, buildReply, buildRepost, InboxKind, NostrInbox } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.inbox';
 import { XInbox } from '@gitroom/nestjs-libraries/bolt-inbox/x.inbox';
 import { recordChannelUsage, UsageKind } from '@gitroom/nestjs-libraries/bolt-costs/usage';
 
@@ -45,6 +45,10 @@ const parseTags = (s: string | null | undefined): string[] => {
 /** Tags are short labels: trimmed, lowercased, unique, at most 20 of 30 chars each. */
 export const cleanTags = (tags: unknown) =>
   [...new Set((Array.isArray(tags) ? tags : []).map((t) => String(t).trim().toLowerCase().slice(0, 30)).filter(Boolean))].slice(0, 20);
+
+export const INBOX_ACTIONS = ['reply', 'repost', 'quote', 'like'] as const;
+export type InboxAction = (typeof INBOX_ACTIONS)[number];
+const ACTION_STAMP = { reply: 'repliedAt', repost: 'repostedAt', quote: 'quotedAt', like: 'likedAt' } as const;
 
 @Injectable()
 export class InboxService {
@@ -325,9 +329,10 @@ export class InboxService {
     return String(password || '');
   }
 
-  async act(organizationId: string, itemId: string, action: 'reply' | 'repost' | 'quote', text?: string) {
+  async act(organizationId: string, itemId: string, action: InboxAction, text?: string) {
     const clean = (text || '').trim();
-    if (action !== 'repost' && !clean) throw new Error('Write something first');
+    const needsText = action === 'reply' || action === 'quote';
+    if (needsText && !clean) throw new Error('Write something first');
     const { item, integration } = await this.itemWithChannel(organizationId, itemId);
 
     let externalId: string | null = null;
@@ -342,17 +347,20 @@ export class InboxService {
             ? buildReply(target, clean, integration.internalId, relays)
             : action === 'quote'
             ? buildQuote(target, clean, relays)
+            : action === 'like'
+            ? buildLike(target, relays)
             : buildRepost(target, relays);
         externalId = (await nostr.publish(relays, template, this.nostrSecret(integration))).id;
       } finally {
         nostr.close(relays);
       }
     } else if (item.platform === 'x') {
-      if (action !== 'repost' && clean.length > 280) throw new Error('X posts are limited to 280 characters');
+      if (needsText && clean.length > 280) throw new Error('X posts are limited to 280 characters');
       const x = new XInbox(await this.token(integration));
       if (action === 'reply') externalId = await x.reply(item.externalId, clean);
       if (action === 'quote') externalId = await x.quote(item.externalId, clean);
       if (action === 'repost') await x.repost(integration.internalId, item.externalId);
+      if (action === 'like') await x.like(integration.internalId, item.externalId);
       await this.addUsage('x-write', 1, { integration, kind: 'write' });
     } else {
       throw new Error('This channel does not support that yet');
@@ -363,7 +371,7 @@ export class InboxService {
       where: { id: item.id },
       data: {
         readAt: item.readAt || stamp,
-        ...(action === 'reply' ? { repliedAt: stamp } : action === 'quote' ? { quotedAt: stamp } : { repostedAt: stamp }),
+        [ACTION_STAMP[action]]: stamp,
       },
     });
     return { ok: true, externalId };
