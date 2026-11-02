@@ -53,3 +53,45 @@ describe('Nostr DMs', () => {
     expect(nip04.decrypt(fan, ME, e.content)).toBe('secret');
   });
 });
+
+describe('Nostr DMs can not be forged', () => {
+  const { finalizeEvent: sign, getEventHash, nip44 } = require('nostr-tools');
+  const attacker = generateSecretKey();
+  const vip = getPublicKey(generateSecretKey()); // someone the attacker wants to impersonate
+
+  // a gift wrap built by hand so the parts can disagree
+  const forge = (rumor: any, sealSigner: Uint8Array, sealPubkeyOverride?: string) => {
+    let seal = sign({ kind: 13, created_at: rumor.created_at, tags: [], content: nip44.encrypt(JSON.stringify(rumor), nip44.getConversationKey(sealSigner, ME)) }, sealSigner);
+    if (sealPubkeyOverride) seal = { ...seal, pubkey: sealPubkeyOverride };
+    const wrapKey = generateSecretKey();
+    return sign({ kind: 1059, created_at: rumor.created_at, tags: [['p', ME]], content: nip44.encrypt(JSON.stringify(seal), nip44.getConversationKey(wrapKey, ME)) }, wrapKey);
+  };
+  const rumorFrom = (pubkey: string, content: string) => {
+    const r: any = { kind: 14, pubkey, created_at: Math.floor(Date.now() / 1000), tags: [['p', ME]], content };
+    r.id = getEventHash(r);
+    return r;
+  };
+
+  it('rejects a message claiming to be from someone other than who sealed it', () => {
+    expect(fromWrap(forge(rumorFrom(vip, 'wire the money'), attacker), ME, me)).toBeNull();
+  });
+
+  it('rejects a fake "you sent this" message', () => {
+    expect(fromWrap(forge(rumorFrom(ME, 'I said something awful'), attacker), ME, me)).toBeNull();
+  });
+
+  it('rejects a seal with a swapped-in pubkey (bad signature)', () => {
+    const r = rumorFrom(vip, 'hi');
+    expect(fromWrap(forge(r, attacker, vip), ME, me)).toBeNull();
+  });
+
+  it('rejects a rumor whose id does not match its content', () => {
+    const r = { ...rumorFrom(getPublicKey(attacker), 'original'), content: 'edited' };
+    expect(fromWrap(forge(r, attacker), ME, me)).toBeNull();
+  });
+
+  it('still accepts a genuine message from the attacker as themselves', () => {
+    const r = rumorFrom(getPublicKey(attacker), 'honest hello');
+    expect(fromWrap(forge(r, attacker), ME, me)).toMatchObject({ peer: getPublicKey(attacker), direction: 'in', text: 'honest hello' });
+  });
+});

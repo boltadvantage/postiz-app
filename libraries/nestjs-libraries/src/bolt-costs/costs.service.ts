@@ -2,16 +2,13 @@
 // cost in metered API use over a date range, for invoicing.
 import { Injectable } from '@nestjs/common';
 import dayjs from 'dayjs';
+import { csvCell } from '@gitroom/nestjs-libraries/bolt-analytics/csv';
 import { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
 import { costOf, USAGE_KINDS, UsageKind, X_READ_USD, X_WRITE_USD } from '@gitroom/nestjs-libraries/bolt-costs/usage';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_DAYS = 400;
 const money = (n: number) => Math.round(n * 10000) / 10000;
-const csvCell = (v: unknown) => {
-  const s = v === null || v === undefined ? '' : String(v);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-};
 
 export type Usage = Record<UsageKind, number>;
 const emptyUsage = (): Usage => ({ history: 0, inbox: 0, dm: 0, write: 0 });

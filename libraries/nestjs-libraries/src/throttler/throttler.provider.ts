@@ -2,6 +2,18 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import { ExecutionContext, Injectable } from '@nestjs/common';
 import { Request } from 'express';
 
+/**
+ * The visitor's address. Behind Cloudflare, CF-Connecting-IP is set by
+ * Cloudflare and can't be forged by the visitor; the first X-Forwarded-For
+ * value can (proxies append to whatever the client sent), so it's only a
+ * fallback for setups without Cloudflare.
+ */
+export const realClientIp = (req: Record<string, any>): string =>
+  String(req.headers?.['cf-connecting-ip'] || '').trim() ||
+  String(req.headers?.['x-forwarded-for'] || '').split(',')[0].trim() ||
+  req.ip ||
+  'unknown';
+
 const isPublicComment = (method: string, url: string) =>
   method === 'POST' && /^\/public\/posts\/[^/]+\/comments/.test(url);
 
@@ -25,10 +37,7 @@ export class ThrottlerBehindProxyGuard extends ThrottlerGuard {
     req: Record<string, any>
   ): Promise<string> {
     if (!req.org) {
-      const forwarded = String(req.headers?.['x-forwarded-for'] || '')
-        .split(',')[0]
-        .trim();
-      return 'ip_' + (forwarded || req.ip || 'unknown');
+      return 'ip_' + realClientIp(req);
     }
 
     return (
@@ -44,7 +53,6 @@ export class ThrottlerRealIpGuard extends ThrottlerGuard {
   protected override async getTracker(
     req: Record<string, any>
   ): Promise<string> {
-    const forwarded = String(req.headers?.['x-forwarded-for'] || '');
-    return forwarded.split(',')[0].trim() || req.ip;
+    return realClientIp(req);
   }
 }

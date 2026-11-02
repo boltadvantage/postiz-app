@@ -1,6 +1,7 @@
 // Bolt Advantage: read side of saved analytics (summary, posts, best times, CSV).
 import { Injectable } from '@nestjs/common';
 import dayjs from 'dayjs';
+import { csvCell } from '@gitroom/nestjs-libraries/bolt-analytics/csv';
 import { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 import { LAST_RUN_KEY, SUPPORTED_PROVIDERS } from '@gitroom/nestjs-libraries/bolt-analytics/bolt-analytics.service';
@@ -109,10 +110,6 @@ export function followerGrowth(rows: Array<{ date: string; followers: number | n
   };
 }
 
-const csvCell = (v: unknown) => {
-  const s = v == null ? '' : String(v);
-  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-};
 
 @Injectable()
 export class BoltAnalyticsQueries {

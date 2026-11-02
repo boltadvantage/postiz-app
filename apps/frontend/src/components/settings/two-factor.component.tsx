@@ -14,7 +14,7 @@ interface Status {
   recoveryCodesLeft: number;
 }
 
-type Mode = 'idle' | 'setup' | 'codes' | 'disable' | 'regenerate';
+type Mode = 'idle' | 'password' | 'setup' | 'codes' | 'disable' | 'regenerate';
 
 const btn = 'rounded-[8px] !h-[36px] !px-[16px] text-[14px] whitespace-nowrap shrink-0';
 const btnSecondary = `${btn} border border-newTableBorder !bg-transparent hover:!bg-newBgColorInner`;
@@ -50,6 +50,7 @@ const TwoFactorComponent = () => {
   const [setup, setSetup] = useState<{ secret: string; qr: string } | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -89,7 +90,8 @@ const TwoFactorComponent = () => {
   };
 
   const startSetup = async () => {
-    const res = await call('/user/2fa/setup');
+    const res = await call('/user/2fa/setup', 'POST', { password });
+    setPassword('');
     if (res) {
       setSetup(res);
       setMode('setup');
@@ -182,7 +184,7 @@ const TwoFactorComponent = () => {
               </Button>
             </div>
           ) : (
-            <Button className={btn} loading={busy} onClick={startSetup}>
+            <Button className={btn} onClick={() => setMode('password')}>
               {t('set_up', 'Set up')}
             </Button>
           ))}
@@ -247,6 +249,38 @@ const TwoFactorComponent = () => {
               }}
             >
               {t('two_factor_saved_them', 'I saved them')}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {mode === 'password' && (
+        <div className="flex flex-col gap-[12px] text-[14px]">
+          <div>{t('two_factor_confirm_password', 'Enter your current password to set up the authenticator app.')}</div>
+          {/* not a <form>: this sits inside the settings page's own form */}
+          <div className="flex gap-[8px] items-center">
+            <div className="bg-newBgColorInner h-[42px] border-newTableBorder border rounded-[8px] flex items-center w-[240px]">
+              <input
+                type="password"
+                autoFocus
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (password) startSetup();
+                  }
+                }}
+                placeholder={t('password', 'Password')}
+                className="h-full bg-transparent outline-none flex-1 px-[16px] text-[16px] text-textColor"
+              />
+            </div>
+            <Button className={btn} loading={busy} disabled={!password} onClick={startSetup}>
+              {t('continue', 'Continue')}
+            </Button>
+            <Button className={btnSecondary} secondary onClick={() => (setPassword(''), reset())}>
+              {t('cancel', 'Cancel')}
             </Button>
           </div>
         </div>

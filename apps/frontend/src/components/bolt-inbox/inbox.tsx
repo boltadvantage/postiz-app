@@ -217,7 +217,14 @@ export const Inbox = () => {
 
   const syncNow = async () => {
     const r = await (await fetch('/inbox/sync', { method: 'POST' })).json();
-    toaster.show(r.started ? t('checking_inbox', 'Checking for new mentions and messages…') : t('sync_running', 'A check is already running.'), 'success');
+    toaster.show(
+      r.started
+        ? t('checking_inbox', 'Checking for new mentions and messages…')
+        : r.wait
+        ? t('check_wait', 'Checked less than a minute ago. Try again in a moment.')
+        : t('sync_running', 'A check is already running.'),
+      'success'
+    );
     setTimeout(refresh, 8000);
   };
   const markAllRead = async () => {
