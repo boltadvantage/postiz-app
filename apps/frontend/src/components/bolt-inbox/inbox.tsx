@@ -40,18 +40,29 @@ const KINDS: Array<{ value: Item['kind']; label: string }> = [
   { value: 'reply', label: 'Replies' },
   { value: 'quote', label: 'Quotes' },
 ];
-const LIMITS: Record<string, number> = { x: 280 };
+// X Premium ("Verified" in the channel's preferences) allows 25,000 characters
+const X_LIMIT = 280;
+const X_PREMIUM_LIMIT = 25000;
+const isPremium = (channel?: Channel) => {
+  try {
+    const s = JSON.parse(channel?.additionalSettings || '[]');
+    return Array.isArray(s) && !!s.find((x: any) => x?.title === 'Verified')?.value;
+  } catch {
+    return false;
+  }
+};
+const limitFor = (platform: string, channel?: Channel) =>
+  platform === 'x' ? (isPremium(channel) ? X_PREMIUM_LIMIT : X_LIMIT) : undefined;
 const short = (s: string | null, n = 140) => (s && s.length > n ? `${s.slice(0, n)}…` : s || '');
-const Composer: FC<{ mode: 'reply' | 'quote'; platform: string; busy: boolean; onSend: (text: string) => void; onCancel: () => void }> = ({
+const Composer: FC<{ mode: 'reply' | 'quote'; limit?: number; busy: boolean; onSend: (text: string) => void; onCancel: () => void }> = ({
   mode,
-  platform,
+  limit,
   busy,
   onSend,
   onCancel,
 }) => {
   const t = useT();
   const [text, setText] = useState('');
-  const limit = LIMITS[platform];
   const over = !!limit && text.length > limit;
   return (
     <div className="flex flex-col gap-[6px] mt-[8px]">
@@ -64,7 +75,7 @@ const Composer: FC<{ mode: 'reply' | 'quote'; platform: string; busy: boolean; o
         className="bg-newBgColorInner border border-newTableBorder rounded-[8px] p-[10px] text-[14px] outline-none resize-y"
       />
       <div className="flex items-center gap-[8px] text-[12px]">
-        {limit && <span className={clsx(over ? 'text-red-400' : 'text-textItemBlur')}>{text.length}/{limit}</span>}
+        {limit && <span className={clsx(over ? 'text-red-400' : 'text-textItemBlur')}>{text.length.toLocaleString()}/{limit.toLocaleString()}</span>}
         <button type="button" onClick={onCancel} className="ms-auto px-[12px] h-[30px] rounded-[6px] border border-newTableBorder">
           {t('cancel', 'Cancel')}
         </button>
@@ -164,7 +175,7 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
             </span>
           </div>
           {(open === 'reply' || open === 'quote') && (
-            <Composer key={open} mode={open} platform={item.platform} busy={busy} onSend={(text) => act(open, text)} onCancel={() => setOpen(null)} />
+            <Composer key={open} mode={open} limit={limitFor(item.platform, channel)} busy={busy} onSend={(text) => act(open, text)} onCancel={() => setOpen(null)} />
           )}
           {open === 'person' && p && <PersonPanel person={p} allTags={allTags} onSaved={refresh} onClose={() => setOpen(null)} />}
         </div>

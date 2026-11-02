@@ -103,7 +103,8 @@ export class XProvider extends SocialAbstract implements SocialProvider {
     const isTwitterPremium = Array.isArray(additionalSettings)
       ? !!additionalSettings.find((p: any) => p?.title === 'Verified')?.value
       : !!additionalSettings;
-    return isTwitterPremium ? 4000 : 280;
+    // Bolt Advantage: X Premium allows 25,000 characters (upstream still had 4,000)
+    return isTwitterPremium ? 25000 : 280;
   }
 
   // Article bodies hold pictures, tweets only take attachments.
