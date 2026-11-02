@@ -1,5 +1,5 @@
 // Bolt Advantage: Nostr inbox — mentions, replies and quotes from relays, and
-// replying, reposting and quoting with the channel's key.
+// replying, reposting, quoting and liking with the channel's key.
 import { SimplePool, finalizeEvent, nip19 } from 'nostr-tools';
 import type { Event, EventTemplate } from 'nostr-tools';
 import WebSocket from 'ws';
@@ -93,6 +93,16 @@ export function buildRepost(target: Event, relays: string[]): EventTemplate {
     created_at: Math.floor(Date.now() / 1000),
     content: JSON.stringify(target),
     tags: [['e', target.id, relayHint(relays)], ['p', target.pubkey]],
+  };
+}
+
+/** NIP-25 like: a "+" reaction pointing at the note and its author. */
+export function buildLike(target: Event, relays: string[]): EventTemplate {
+  return {
+    kind: 7,
+    created_at: Math.floor(Date.now() / 1000),
+    content: '+',
+    tags: [['e', target.id, relayHint(relays), target.pubkey], ['p', target.pubkey], ['k', String(target.kind)]],
   };
 }
 

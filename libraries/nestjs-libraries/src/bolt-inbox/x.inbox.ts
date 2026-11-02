@@ -1,5 +1,5 @@
 // Bolt Advantage: X inbox — mentions and replies under the daily read budget,
-// and replying, reposting and quoting.
+// and replying, reposting, quoting and liking.
 import { TwitterApi } from 'twitter-api-v2';
 import type { InboxKind } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.inbox';
 
@@ -71,6 +71,10 @@ export class XInbox {
 
   async repost(userId: string, tweetId: string) {
     await this.client.v2.retweet(userId, tweetId);
+  }
+
+  async like(userId: string, tweetId: string) {
+    await this.client.v2.like(userId, tweetId);
   }
 
   async quote(tweetId: string, text: string) {

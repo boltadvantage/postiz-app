@@ -279,6 +279,7 @@ model InboxItem {
   repliedAt        DateTime?
   repostedAt       DateTime?
   quotedAt         DateTime?
+  likedAt          DateTime?
   createdAt        DateTime  @default(now())
 
   @@unique([integrationId, externalId])

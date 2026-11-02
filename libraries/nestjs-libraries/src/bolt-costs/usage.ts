@@ -4,7 +4,7 @@
 import type { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
 import { dayKey } from '@gitroom/nestjs-libraries/bolt-analytics/schedule';
 
-/** history = saved stats and followers, inbox = mentions, dm = direct messages, write = replies/reposts/quotes/messages sent */
+/** history = saved stats and followers, inbox = mentions, dm = direct messages, write = replies/reposts/quotes/likes/messages sent */
 export type UsageKind = 'history' | 'inbox' | 'dm' | 'write';
 export const USAGE_KINDS: UsageKind[] = ['history', 'inbox', 'dm', 'write'];
 

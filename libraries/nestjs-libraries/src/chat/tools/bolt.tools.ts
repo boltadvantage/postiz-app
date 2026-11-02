@@ -69,15 +69,15 @@ export class BoltInboxRespondTool implements AgentToolInterface {
   run() {
     return createTool({
       id: 'boltInboxRespondTool',
-      mcp: write('Reply / Repost / Quote an Inbox Item', true),
+      mcp: write('Reply / Repost / Quote / Like an Inbox Item', true),
       description: `
-Publicly reply to, repost, or quote an inbox item (from boltInboxListTool) from the channel it arrived on. This posts on the social network right away and cannot be undone from here.
-"reply" and "quote" need "text" (X: 280 characters max). "repost" takes no text.
+Publicly reply to, repost, quote or like an inbox item (from boltInboxListTool) from the channel it arrived on. This posts on the social network right away and cannot be undone from here.
+"reply" and "quote" need "text" (X: 280 characters max). "repost" and "like" take no text.
 Always show the user the exact text and which item it answers, and get their confirmation before calling this.
 `,
       inputSchema: z.object({
         itemId: z.string().describe('Inbox item id'),
-        action: z.enum(['reply', 'repost', 'quote']),
+        action: z.enum(['reply', 'repost', 'quote', 'like']),
         text: z.string().optional(),
       }),
       outputSchema,
@@ -346,7 +346,7 @@ export class BoltCostsTool implements AgentToolInterface {
       description: `
 What each client cost in metered API use (X reads and posts) over a date range, for invoicing.
 Clients are Postiz customers/groups (a channel is put in one from its menu: "Move / add to group"); channels without one are listed under a client with an empty name.
-Per channel: reads for history (saved stats, followers), inbox (mentions), dm (direct messages), and write (replies, reposts, quotes, messages sent), with an estimated USD cost at the listed prices.
+Per channel: reads for history (saved stats, followers), inbox (mentions), dm (direct messages), and write (replies, reposts, quotes, likes, messages sent), with an estimated USD cost at the listed prices.
 Costs are estimates; the X developer console has the real bill. "trackingSince" is when per-channel tracking started - nothing before it is included.
 `,
       inputSchema: z.object({

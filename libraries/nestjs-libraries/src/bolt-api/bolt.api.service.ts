@@ -2,7 +2,7 @@
 // people, queue, pause, saved analytics) for outside callers — the MCP tools
 // AI agents use and the API-key public API — so both always match. Also client costs.
 import { Injectable } from '@nestjs/common';
-import { InboxService } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
+import { INBOX_ACTIONS, InboxService } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
 import { DmService } from '@gitroom/nestjs-libraries/bolt-inbox/dm.service';
 import { QueueService } from '@gitroom/nestjs-libraries/bolt-queue/queue.service';
 import { PauseService } from '@gitroom/nestjs-libraries/bolt-queue/pause.service';
@@ -80,13 +80,14 @@ export class BoltApiService {
         replied: !!i.repliedAt,
         reposted: !!i.repostedAt,
         quoted: !!i.quotedAt,
+        liked: !!i.likedAt,
         person: person(i.person),
       })),
     };
   }
 
   respond(orgId: string, itemId: string, action: string, text?: string) {
-    if (!['reply', 'repost', 'quote'].includes(action)) throw new Error('action must be reply, repost or quote');
+    if (!(INBOX_ACTIONS as readonly string[]).includes(action)) throw new Error('action must be reply, repost, quote or like');
     return this._inbox.act(orgId, itemId, action as any, text);
   }
 

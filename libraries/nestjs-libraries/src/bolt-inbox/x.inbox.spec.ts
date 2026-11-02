@@ -5,6 +5,7 @@ jest.mock('twitter-api-v2', () => ({
       userMentionTimeline: async (...a: any[]) => (calls.push(['mentions', ...a]), { data: { data: [], includes: {}, meta: {} } }),
       reply: async (...a: any[]) => (calls.push(['reply', ...a]), { data: { id: 'r1' } }),
       retweet: async (...a: any[]) => (calls.push(['retweet', ...a]), { data: {} }),
+      like: async (...a: any[]) => (calls.push(['like', ...a]), { data: { liked: true } }),
       tweet: async (...a: any[]) => (calls.push(['tweet', ...a]), { data: { id: 'q1' } }),
     };
   },
@@ -52,15 +53,17 @@ describe('x inbox', () => {
     expect(Date.parse(calls[1][2].start_time)).toBeGreaterThan(Date.now() - 7.1 * 86400000);
   });
 
-  it('replies, reposts and quotes through the right endpoints', async () => {
+  it('replies, reposts, quotes and likes through the right endpoints', async () => {
     const x = new XInbox('tok:sec');
     expect(await x.reply('900', 'thanks')).toBe('r1');
     await x.repost('me', '900');
     expect(await x.quote('900', 'worth a read')).toBe('q1');
+    await x.like('me', '900');
     expect(calls).toEqual([
       ['reply', 'thanks', '900'],
       ['retweet', 'me', '900'],
       ['tweet', { text: 'worth a read', quote_tweet_id: '900' }],
+      ['like', 'me', '900'],
     ]);
   });
 });
