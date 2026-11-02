@@ -12,6 +12,7 @@ import { getPublicKey, Relay, finalizeEvent, SimplePool } from 'nostr-tools';
 import WebSocket from 'ws';
 import { AuthService } from '@gitroom/helpers/auth/auth.service';
 import { Integration } from '@prisma/client';
+import { secretKeyFromHex } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.inbox';
 
 // @ts-ignore
 global.WebSocket = WebSocket;
@@ -33,7 +34,7 @@ export class NostrProvider extends SocialAbstract implements SocialProvider {
   isBetweenSteps = false;
   scopes = [] as string[];
   editor = 'normal' as const;
-  toolTip = 'Make sure you private a HEX key of your Nostr private key, you can get it from websites like iris.to'
+  toolTip = 'Your Nostr private key: nsec1… or 64-character hex'
 
   maxLength() {
     return 100000;
@@ -71,10 +72,11 @@ export class NostrProvider extends SocialAbstract implements SocialProvider {
     };
   }
 
+  // Bolt Advantage: accept nsec1… as well as hex, and refuse anything else.
+  // Upstream read every key as hex, so an nsec silently became a different,
+  // empty account and posts went there.
   private secretKey(password: string) {
-    return Uint8Array.from(
-      (password.match(/.{1,2}/g) || []).map((byte: any) => parseInt(byte, 16))
-    );
+    return secretKeyFromHex(password);
   }
 
   private async findRelayInformation(pubkey: string) {

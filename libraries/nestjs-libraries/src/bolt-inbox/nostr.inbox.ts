@@ -131,11 +131,20 @@ export function buildQuote(target: Event, text: string, relays: string[]): Event
   };
 }
 
-export function secretKeyFromHex(hex: string) {
-  if (!/^[0-9a-f]{64}$/i.test(hex)) {
-    throw new Error('This Nostr channel has no usable key; reconnect it');
+/** A Nostr private key as 64 hex characters or an nsec1… key; anything else throws. */
+export function secretKeyFromHex(key: string) {
+  const v = String(key || '').trim();
+  if (/^nsec1/i.test(v)) {
+    try {
+      const d = nip19.decode(v.toLowerCase());
+      if (d.type === 'nsec') return d.data as Uint8Array;
+    } catch {
+      /* falls through to the error below */
+    }
+  } else if (/^[0-9a-f]{64}$/i.test(v)) {
+    return Uint8Array.from(v.match(/.{2}/g)!.map((b) => parseInt(b, 16)));
   }
-  return Uint8Array.from(hex.match(/.{2}/g)!.map((b) => parseInt(b, 16)));
+  throw new Error('This Nostr channel has no usable key; reconnect it');
 }
 
 /** Resolves with the first promise that succeeds; rejects only if all fail. */
