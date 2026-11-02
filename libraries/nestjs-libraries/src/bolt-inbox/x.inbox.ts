@@ -126,7 +126,9 @@ export function parseDmEvents(res: any, self: string, afterId?: string | null) {
     [...users.values()].map((u) => [u.id, { id: u.id, handle: u.username, name: u.name, avatar: u.profile_image_url }])
   );
   const reads = (res?.data?.length || 0) + (res?.includes?.users?.length || 0);
-  return { messages, people, reads, reachedKnown, nextToken: res?.meta?.next_token as string | undefined };
+  // newest event of any kind (group chats included), so the cursor moves past it
+  const newestId = (res?.data?.[0]?.id as string | undefined) || undefined;
+  return { messages, people, reads, reachedKnown, newestId, nextToken: res?.meta?.next_token as string | undefined };
 }
 
 /** X answers 403 when the app or the connection lacks Direct Message permission. */
@@ -145,15 +147,21 @@ export class XDms {
     });
   }
 
-  /** Newest-first pages until we reach what we already have, run out of budget, or pass `oldest`. */
+  /**
+   * Newest-first pages until we reach what we already have, run out of budget, or pass `oldest`.
+   * X has no "newer than" filter for DMs and bills every event it returns, so with a
+   * cursor the first page is a single event: if that one is known, the check costs ~2 reads.
+   */
   async since(self: string, opts: { afterId?: string | null; budget: number; oldest: Date }) {
     const messages: XDm[] = [];
     const people = new Map<string, { id: string; handle?: string; name?: string; avatar?: string }>();
     let reads = 0;
     let token: string | undefined;
+    let newestId: string | undefined;
     while (reads < opts.budget) {
+      const peek = !!opts.afterId && !token;
       const res = await this.client.v2.get('dm_events', {
-        max_results: Math.min(100, Math.max(1, opts.budget - reads)),
+        max_results: peek ? 1 : Math.min(100, Math.max(1, opts.budget - reads)),
         event_types: 'MessageCreate',
         'dm_event.fields': 'id,text,event_type,dm_conversation_id,created_at,sender_id',
         expansions: 'sender_id',
@@ -161,6 +169,7 @@ export class XDms {
         ...(token ? { pagination_token: token } : {}),
       });
       const page = parseDmEvents(res, self, opts.afterId);
+      newestId = newestId || page.newestId;
       reads += Math.max(1, page.reads);
       messages.push(...page.messages);
       page.people.forEach((v, k) => people.set(k, v));
@@ -168,7 +177,7 @@ export class XDms {
       token = page.nextToken;
       if (page.reachedKnown || !token || (oldestOnPage && oldestOnPage < opts.oldest)) break;
     }
-    return { messages: messages.filter((m) => m.createdAt >= opts.oldest), people, reads };
+    return { messages: messages.filter((m) => m.createdAt >= opts.oldest), people, reads, newestId };
   }
 
   async send(peerId: string, text: string) {

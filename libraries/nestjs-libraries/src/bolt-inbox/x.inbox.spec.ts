@@ -1,4 +1,5 @@
 const calls: any[] = [];
+const dmPages: any[] = [];
 jest.mock('twitter-api-v2', () => ({
   TwitterApi: class {
     v2 = {
@@ -7,6 +8,7 @@ jest.mock('twitter-api-v2', () => ({
       retweet: async (...a: any[]) => (calls.push(['retweet', ...a]), { data: {} }),
       like: async (...a: any[]) => (calls.push(['like', ...a]), { data: { liked: true } }),
       tweet: async (...a: any[]) => (calls.push(['tweet', ...a]), { data: { id: 'q1' } }),
+      get: async (...a: any[]) => (calls.push(['get', ...a]), dmPages.shift() || { data: [], meta: {} }),
     };
   },
 }));
@@ -97,6 +99,42 @@ describe('X direct messages', () => {
     const r = parseDmEvents(page, ME, '1800');
     expect(r.messages.map((m: any) => m.id)).toEqual(['1900']);
     expect(r.reachedKnown).toBe(true);
+  });
+
+  it('reports the newest event even when it is a group message', () => {
+    expect(parseDmEvents({ data: [page.data[2], page.data[3]] }, ME).newestId).toBe('1700');
+  });
+
+  describe('since', () => {
+    const { XDms } = require('./x.inbox');
+    const dms = () => new XDms('a:b');
+    const oldest = new Date('2026-10-01T00:00:00Z');
+    beforeEach(() => ((calls.length = 0), (dmPages.length = 0)));
+
+    it('peeks at one event when nothing is new, instead of re-reading a full page', async () => {
+      dmPages.push({ data: [page.data[0]], includes: {}, meta: { next_token: 'n1' } });
+      const r = await dms().since(ME, { afterId: '1900', budget: 20, oldest });
+      expect(calls).toHaveLength(1);
+      expect(calls[0][2].max_results).toBe(1);
+      expect(r.messages).toEqual([]);
+      expect(r.reads).toBe(1);
+    });
+
+    it('keeps reading past the peek when something new arrived', async () => {
+      dmPages.push({ data: [page.data[0]], includes: {}, meta: { next_token: 'n1' } });
+      dmPages.push({ data: [page.data[1], page.data[2]], includes: page.includes, meta: { next_token: 'n2' } });
+      const r = await dms().since(ME, { afterId: '1700', budget: 20, oldest });
+      expect(calls.map((c) => c[2].max_results)).toEqual([1, 19]);
+      expect(calls[1][2].pagination_token).toBe('n1');
+      expect(r.messages.map((m: any) => m.id)).toEqual(['1900', '1800']);
+      expect(r.newestId).toBe('1900');
+    });
+
+    it('reads a full page on the first run', async () => {
+      dmPages.push({ data: page.data, includes: page.includes, meta: {} });
+      await dms().since(ME, { budget: 20, oldest });
+      expect(calls[0][2].max_results).toBe(20);
+    });
   });
 
   it('compares ids too big for numbers', () => {

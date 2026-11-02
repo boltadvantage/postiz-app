@@ -16,6 +16,8 @@ const LOCK_KEY = 'bolt-dm:lock';
 const FIRST_RUN_DAYS = 14;
 const X_MIN_INTERVAL_MIN = 30;
 const X_MAX_READS_PER_RUN = 20;
+// left untouched by DM checks so mentions can always run
+const X_MENTIONS_RESERVE = 10;
 const X_DM_PERMISSION =
   'X needs Direct Message permission. In the X developer portal, set your app to "Read and write and Direct message", then reconnect X here.';
 const PAGE = 40;
@@ -156,7 +158,7 @@ export class DmService {
     const state = await this._inbox.cursor(cursorId);
     if (!force && state?.lastRunAt && dayjs().diff(state.lastRunAt, 'minute') < X_MIN_INTERVAL_MIN) return;
     // mentions come first; DMs take at most half of what's left of the inbox's share
-    const budget = Math.min(X_MAX_READS_PER_RUN, Math.floor((await this._inbox.xBudgetLeft()) / 2));
+    const budget = Math.min(X_MAX_READS_PER_RUN, Math.floor(((await this._inbox.xBudgetLeft()) - X_MENTIONS_RESERVE) / 2));
     if (budget < 3) return;
     const x = new XDms(await this._inbox.token(integration));
     try {
@@ -171,7 +173,10 @@ export class DmService {
         res.messages.map((m) => ({ externalId: m.id, peer: m.peer, direction: m.direction, text: m.text, sentAt: m.createdAt, protocol: null })),
         res.people
       );
-      const newest = res.messages.reduce<string | null>((n, m) => (xIdAfter(m.id, n) ? m.id : n), state?.cursor || null);
+      const newest = [...res.messages.map((m) => m.id), ...(res.newestId ? [res.newestId] : [])].reduce<string | null>(
+        (n, id) => (xIdAfter(id, n) ? id : n),
+        state?.cursor || null
+      );
       await this._inbox.saveCursor(cursorId, { cursor: newest, error: null });
     } catch (err: any) {
       if (isDmPermissionError(err)) {
