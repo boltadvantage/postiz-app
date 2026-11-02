@@ -15,6 +15,7 @@ import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
 import { Channel, Person, PersonPanel, pretty, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
 import { Messages } from '@gitroom/frontend/components/bolt-inbox/messages';
 import { useIntegrationList } from '@gitroom/frontend/components/launches/helpers/use.integration.list';
+import { ChannelAvatar } from '@gitroom/frontend/components/bolt-shared/channel.avatar';
 dayjs.extend(relativeTime);
 
 type Item = {
@@ -120,7 +121,10 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
   return (
     <div className={clsx('rounded-[8px] p-[12px] border', item.readAt ? 'bg-newTableHeader/50 border-transparent' : 'bg-newTableHeader border-[#612BD3]/50')}>
       <div className="flex gap-[10px]">
-        <img src={p?.avatar || `/icons/platforms/${item.platform}.png`} className="w-[36px] h-[36px] rounded-full shrink-0 object-cover" alt="" />
+        <div className="relative shrink-0 w-[36px] h-[36px]">
+          <img src={p?.avatar || `/icons/platforms/${item.platform}.png`} className="w-[36px] h-[36px] rounded-full object-cover" alt="" />
+          <img src={`/icons/platforms/${item.platform}.png`} className="w-[18px] h-[18px] rounded-[6px] absolute -bottom-[3px] -end-[5px] border border-fifth" alt={item.platform} />
+        </div>
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-x-[8px] gap-y-[2px] text-[13px]">
             <button type="button" onClick={() => setOpen(open === 'person' ? null : 'person')} className="font-[500] hover:underline truncate max-w-[220px]">
@@ -282,8 +286,8 @@ export const Inbox = () => {
         <div className={side}>
           <div className="text-[11px] uppercase text-textItemBlur tracking-wide">{t('channels', 'Channels')}</div>
           {channelList.map((c) => (
-            <button key={c.id} type="button" onClick={() => toggle(channels, setChannels, c.id)} className={pill(channels.includes(c.id))}>
-              <img src={c.picture || `/icons/platforms/${c.identifier}.png`} className="w-[18px] h-[18px] rounded-full" alt="" />
+            <button key={c.id} type="button" onClick={() => toggle(channels, setChannels, c.id)} className={clsx(pill(channels.includes(c.id)), '!h-[48px] !gap-[12px]')}>
+              <ChannelAvatar picture={c.picture} platform={c.identifier} />
               <span className="truncate">{c.name}</span>
               {view === 'mentions' && !!counts?.byChannel[c.id] && <span className="ms-auto text-[11px]">{counts.byChannel[c.id]}</span>}
             </button>

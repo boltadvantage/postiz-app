@@ -11,6 +11,7 @@ import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
 import { DayPick, fillDayTimes } from '@gitroom/nestjs-libraries/bolt-queue/slots';
+import { ChannelAvatar } from '@gitroom/frontend/components/bolt-shared/channel.avatar';
 
 type Slot = { day: number; minute: number; source?: 'data' | 'filler' };
 type Channel = { id: string; name: string; picture: string | null; providerIdentifier: string };
@@ -568,7 +569,7 @@ export const Queue = () => {
               onClick={() => setSelected(r.integration.id)}
               className={clsx('flex items-center gap-[8px] rounded-[8px] px-[10px] h-[44px] border text-start', active ? 'border-[#612BD3] bg-newTableHeader' : 'border-newTableBorder')}
             >
-              <img src={r.integration.picture || `/icons/platforms/${r.integration.providerIdentifier}.png`} className="w-[26px] h-[26px] rounded-full" alt="" />
+              <ChannelAvatar picture={r.integration.picture} platform={r.integration.providerIdentifier} size={28} />
               <div className="flex flex-col leading-tight">
                 <span className="text-[13px] max-w-[160px] truncate">{r.integration.name}</span>
                 <span className="text-[11px] text-textItemBlur">

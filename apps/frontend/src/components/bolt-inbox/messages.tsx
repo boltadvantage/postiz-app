@@ -11,6 +11,7 @@ import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
 import { Channel as InboxChannel, Person as InboxPerson, PersonPanel, pretty, Status as InboxStatus } from '@gitroom/frontend/components/bolt-inbox/shared';
+import { ChannelAvatar } from '@gitroom/frontend/components/bolt-shared/channel.avatar';
 
 type Conversation = {
   id: string;
@@ -85,7 +86,7 @@ const Thread: FC<{ convo: Conversation; channel?: InboxChannel; allTags: string[
           </button>
           <div className="flex items-center gap-[6px] text-[11px] text-textItemBlur">
             {p?.handle && <span className="truncate max-w-[160px]">@{p.handle}</span>}
-            <img src={channel?.picture || `/icons/platforms/${convo.platform}.png`} className="w-[14px] h-[14px] rounded-full" alt="" />
+            <ChannelAvatar picture={channel?.picture} platform={convo.platform} size={18} />
             <span className="truncate max-w-[140px]">{channel?.name}</span>
             {convo.platform === 'nostr' && (
               <span title={convo.protocol === 'nip04' ? t('dm_nip04_explain', 'They use the older Nostr encryption (NIP-04), so replies use it too.') : t('dm_nip17_explain', 'Private messages (NIP-17): content and who you talk to are hidden from relays.')}>
@@ -218,7 +219,7 @@ export const Messages: FC<{
               >
                 <div className="relative shrink-0">
                   <img src={c.person?.avatar || `/icons/platforms/${c.platform}.png`} className="w-[38px] h-[38px] rounded-full object-cover" alt="" />
-                  <img src={channelById.get(c.integrationId)?.picture || `/icons/platforms/${c.platform}.png`} className="w-[16px] h-[16px] rounded-full absolute -bottom-[2px] -end-[2px] border border-newBgColorInner" alt="" />
+                  <img src={`/icons/platforms/${c.platform}.png`} className="w-[18px] h-[18px] rounded-[6px] absolute -bottom-[3px] -end-[5px] border border-fifth" alt={c.platform} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-[6px] text-[13px]">
