@@ -198,7 +198,7 @@ export const Inbox = () => {
     ...(search ? { q: search } : {}),
   }).toString();
   const { data, mutate, isLoading } = useSWR<{ total: number; pages: number; items: Item[] }>(view === 'mentions' ? `/inbox?${query}` : null, get, { refreshInterval: 60000 });
-  const { data: counts, mutate: mutateCounts } = useSWR<{ unread: number; byChannel: Record<string, number>; messages: number }>('/inbox/counts', get, { refreshInterval: 60000 });
+  const { data: counts, mutate: mutateCounts } = useSWR<{ unread: number; byChannel: Record<string, number>; messages: number; xPaused?: boolean }>('/inbox/counts', get, { refreshInterval: 60000 });
   const { data: tags, mutate: mutateTags } = useSWR<Array<{ tag: string; people: number }>>('/inbox/tags', get);
   const { data: muted, mutate: mutateMuted } = useSWR<Person[]>('/inbox/people?muted=true', get);
   // the app's shared channel list (other screens cache this key as a plain array)
@@ -342,6 +342,11 @@ export const Inbox = () => {
             {t('check_now', 'Check now')}
           </button>
         </div>
+        {counts?.xPaused && (
+          <div className="px-[12px] py-[8px] rounded-[8px] border border-amber-500/40 bg-amber-500/10 text-[13px]">
+            {t('x_paused', "X paused: today's read limit is reached, so X isn't checked again until tomorrow. Nostr is still checked.")}
+          </div>
+        )}
         {view === 'messages' ? (
           <Messages
             status={status}

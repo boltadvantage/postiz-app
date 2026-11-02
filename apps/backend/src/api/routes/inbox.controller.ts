@@ -48,8 +48,8 @@ export class InboxController {
 
   @Get('/counts')
   async counts(@GetOrgFromRequest() org: Organization) {
-    const [items, messages] = await Promise.all([this._inbox.counts(org.id), this._dms.unreadCount(org.id)]);
-    return { ...items, messages };
+    const [items, messages, xPaused] = await Promise.all([this._inbox.counts(org.id), this._dms.unreadCount(org.id), this._inbox.xPaused(org.id)]);
+    return { ...items, messages, xPaused };
   }
 
   @Get('/tags')

@@ -171,6 +171,15 @@ export class InboxService {
     return Math.max(0, X_INBOX_READS() - (row?.reads || 0));
   }
 
+  /** True when the org has X connected and today's inbox share is spent, so X checks are skipped. */
+  async xPaused(organizationId: string) {
+    if ((await this.xBudgetLeft()) >= 5) return false;
+    const x = await this._prisma.integration.count({
+      where: { organizationId, providerIdentifier: 'x', deletedAt: null, disabled: false, type: 'social' },
+    });
+    return x > 0;
+  }
+
   /** Count against the install-wide cap, and (with a channel) on that channel's cost ledger. */
   async addUsage(provider: string, n: number, channel?: { integration: Integration; kind: UsageKind }) {
     if (channel) await recordChannelUsage(this._prisma, channel.integration, channel.kind, n);
