@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description: 'How Bolt Advantage handles data from connected social accounts.',
 };
 
-const CONTACT = 'jeremy@boltadvantage.com';
+const CONTACT_URL = 'https://boltadvantage.com/#contact';
 const UPDATED = 'November 2, 2026';
 
 const Section = ({ id, title, children }: { id?: string; title: string; children: ReactNode }) => (
@@ -79,32 +79,31 @@ export default function PrivacyPage() {
           <ul className="list-disc ps-[22px] flex flex-col gap-[4px]">
             <li>
               <b>Facebook or Instagram:</b> go to Facebook Settings &amp; privacy → Settings → Business integrations,
-              find our app and click Remove. This cancels our access right away. Then email us to delete what we
+              find our app and click Remove. This cancels our access right away. Then contact us to delete what we
               already stored.
             </li>
             <li>
               <b>X, LinkedIn and others:</b> revoke our app in that platform&apos;s connected-apps settings.
             </li>
             <li>
-              <b>Any account:</b> email{' '}
-              <a className="underline" href={`mailto:${CONTACT}?subject=Data%20deletion%20request`}>
-                {CONTACT}
-              </a>{' '}
-              with the subject &quot;Data deletion request&quot; and the account name. We will delete the data
-              within 30 days and confirm by email.
+              <b>Any account:</b> send a &quot;Data deletion request&quot; with the account name through the{' '}
+              <a className="underline" href={CONTACT_URL}>
+                contact form at boltadvantage.com
+              </a>
+              . We will delete the data within 30 days and confirm with you.
             </li>
           </ul>
           <p>
-            If you commented on or messaged an account we manage and want that removed from our tool, email us the
+            If you commented on or messaged an account we manage and want that removed from our tool, contact us the
             same way.
           </p>
         </Section>
 
         <Section title="Changes and contact">
           <p>
-            If this policy changes we will update the date at the top. Questions go to{' '}
-            <a className="underline" href={`mailto:${CONTACT}`}>
-              {CONTACT}
+            If this policy changes we will update the date at the top. Questions go through the{' '}
+            <a className="underline" href={CONTACT_URL}>
+              contact form at boltadvantage.com
             </a>
             .
           </p>
