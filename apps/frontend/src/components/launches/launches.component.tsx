@@ -5,6 +5,7 @@ import {
   CustomVariables,
 } from '@gitroom/frontend/components/launches/add.provider.component';
 import { FC, useCallback, useEffect, useMemo, useState } from 'react';
+import { nip19 } from 'nostr-tools';
 import SafeImage from '@gitroom/react/helpers/safe.image';
 import { capitalize, groupBy, orderBy } from 'lodash';
 import { CalendarWeekProvider } from '@gitroom/frontend/components/launches/calendar.context';
@@ -440,6 +441,7 @@ export const MenuComponent: FC<
         )}
       >
         {integration.name}
+        {integration.identifier === 'nostr' && <NostrNpub pubkey={integration.internalId} />}
       </div>
       <Menu
         canChangeProfilePicture={integration.changeProfilePicture}
@@ -454,6 +456,22 @@ export const MenuComponent: FC<
         }
         canDisable={!integration.disabled}
       />
+    </div>
+  );
+};
+// Bolt Advantage: show which Nostr account a channel posts as, from its public key
+const NostrNpub: FC<{ pubkey?: string }> = ({ pubkey }) => {
+  const npub = useMemo(() => {
+    try {
+      return pubkey ? nip19.npubEncode(pubkey) : '';
+    } catch {
+      return '';
+    }
+  }, [pubkey]);
+  if (!npub) return null;
+  return (
+    <div className="text-[11px] opacity-60 font-mono" data-tooltip-id="tooltip" data-tooltip-content={npub}>
+      {npub.slice(0, 12)}…{npub.slice(-6)}
     </div>
   );
 };
