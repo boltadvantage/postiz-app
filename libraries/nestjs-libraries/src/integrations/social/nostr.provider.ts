@@ -7,7 +7,7 @@ import {
 import { makeSecureId } from '@gitroom/nestjs-libraries/services/make.secure.id';
 import dayjs from 'dayjs';
 import { SocialAbstract } from '@gitroom/nestjs-libraries/integrations/social.abstract';
-import { getPublicKey, Relay, finalizeEvent, SimplePool } from 'nostr-tools';
+import { getPublicKey, Relay, finalizeEvent, SimplePool, nip19 } from 'nostr-tools';
 
 import WebSocket from 'ws';
 import { AuthService } from '@gitroom/helpers/auth/auth.service';
@@ -132,17 +132,20 @@ export class NostrProvider extends SocialAbstract implements SocialProvider {
       const body = JSON.parse(Buffer.from(params.code, 'base64').toString());
 
       const pubkey = getPublicKey(this.secretKey(body.password));
+      // Bolt Advantage: an account with no profile shows its npub, not "No Name"
+      const npub = nip19.npubEncode(pubkey);
+      const shortNpub = `${npub.slice(0, 12)}…${npub.slice(-6)}`;
 
       const user = await this.findRelayInformation(pubkey);
 
       return {
         id: pubkey,
-        name: user.display_name || user.displayName || user.name || 'No Name',
+        name: user.display_name || user.displayName || user.name || shortNpub,
         accessToken: AuthService.signJWT({ password: body.password }),
         refreshToken: '',
         expiresIn: dayjs().add(200, 'year').unix() - dayjs().unix(),
         picture: user?.picture || '',
-        username: user.name || 'nousername',
+        username: user.name || shortNpub,
       };
     } catch (e) {
       console.log(e);
