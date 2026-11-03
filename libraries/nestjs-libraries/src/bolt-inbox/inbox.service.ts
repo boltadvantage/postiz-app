@@ -51,6 +51,16 @@ export const INBOX_ACTIONS = ['reply', 'repost', 'quote', 'like'] as const;
 export type InboxAction = (typeof INBOX_ACTIONS)[number];
 const ACTION_STAMP = { reply: 'repliedAt', repost: 'repostedAt', quote: 'quotedAt', like: 'likedAt' } as const;
 
+/** X Premium ("Verified" in the channel's preferences) allows 25,000 characters. */
+export const xIsPremium = (integration: Pick<Integration, 'additionalSettings'>) => {
+  try {
+    const s = JSON.parse(integration.additionalSettings || '[]');
+    return Array.isArray(s) && !!s.find((x: any) => x?.title === 'Verified')?.value;
+  } catch {
+    return false;
+  }
+};
+
 @Injectable()
 export class InboxService {
   private readonly _logger = new Logger('BoltInbox');
@@ -361,7 +371,10 @@ export class InboxService {
         nostr.close(relays);
       }
     } else if (item.platform === 'x') {
-      if (needsText && clean.length > 280) throw new Error('X posts are limited to 280 characters');
+      const limit = xIsPremium(integration) ? 25000 : 280;
+      if (needsText && clean.length > limit) {
+        throw new Error(`X posts are limited to ${limit.toLocaleString()} characters${limit === 280 ? ' (tick Verified in the channel preferences if this account has X Premium)' : ''}`);
+      }
       const x = new XInbox(await this.token(integration));
       if (action === 'reply') externalId = await x.reply(item.externalId, clean);
       if (action === 'quote') externalId = await x.quote(item.externalId, clean);
