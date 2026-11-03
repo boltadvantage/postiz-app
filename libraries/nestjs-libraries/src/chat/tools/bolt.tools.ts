@@ -42,7 +42,7 @@ export class BoltInboxListTool implements AgentToolInterface {
       id: 'boltInboxListTool',
       mcp: read('List Inbox (mentions, replies, quotes)'),
       description: `
-List what people posted at the user's channels (Nostr and X): mentions, replies to their posts, and quotes of their posts. Newest first, 50 per page.
+List what people posted at the user's channels: Nostr and X mentions, replies and quotes, and comments on their Facebook Pages' posts (kind "reply", platform "facebook"). Newest first, 50 per page.
 Muted people are left out unless showMuted is true. Each item has an "id" (use it with boltInboxRespondTool), the text, who wrote it ("person", with the user's private tags and notes), the post of theirs it answers ("inReplyToText"), and whether it was already read, replied to, reposted or quoted.
 Direct messages are separate: use boltConversationsListTool.
 `,
@@ -72,7 +72,7 @@ export class BoltInboxRespondTool implements AgentToolInterface {
       mcp: write('Reply / Repost / Quote / Like an Inbox Item', true),
       description: `
 Publicly reply to, repost, quote or like an inbox item (from boltInboxListTool) from the channel it arrived on. This posts on the social network right away and cannot be undone from here.
-"reply" and "quote" need "text" (X: 280 characters, or 25,000 for X Premium channels). "repost" and "like" take no text.
+"reply" and "quote" need "text" (X: 280 characters, or 25,000 for X Premium channels). "repost" and "like" take no text. Facebook comments can only be replied to or liked.
 Always show the user the exact text and which item it answers, and get their confirmation before calling this.
 `,
       inputSchema: z.object({
