@@ -72,7 +72,7 @@ export class BoltInboxRespondTool implements AgentToolInterface {
       mcp: write('Reply / Repost / Quote / Like an Inbox Item', true),
       description: `
 Publicly reply to, repost, quote or like an inbox item (from boltInboxListTool) from the channel it arrived on. This posts on the social network right away and cannot be undone from here.
-"reply" and "quote" need "text" (X: 280 characters max). "repost" and "like" take no text.
+"reply" and "quote" need "text" (X: 280 characters, or 25,000 for X Premium channels). "repost" and "like" take no text.
 Always show the user the exact text and which item it answers, and get their confirmation before calling this.
 `,
       inputSchema: z.object({
