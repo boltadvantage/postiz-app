@@ -11,13 +11,17 @@ import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 import { isLocked, withLock } from '@gitroom/nestjs-libraries/redis/bolt.lock';
 import { buildLike, buildQuote, buildReply, buildRepost, InboxKind, NostrInbox } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.inbox';
 import { XInbox } from '@gitroom/nestjs-libraries/bolt-inbox/x.inbox';
+import { FacebookInbox } from '@gitroom/nestjs-libraries/bolt-inbox/facebook.inbox';
 import { UsageKind } from '@gitroom/nestjs-libraries/bolt-costs/usage';
 import { chargeX, hasLink, worstItem, xBudgetLeft, xBudgetSettings, XPool, XResources } from '@gitroom/nestjs-libraries/bolt-costs/x-billing';
 
+/** Channels with direct messages; the inbox also collects Facebook Page comments. */
 export const INBOX_PROVIDERS = ['nostr', 'x'];
+export const MENTION_PROVIDERS = [...INBOX_PROVIDERS, 'facebook'];
 const LOCK_KEY = 'bolt-inbox:lock';
 const NOSTR_FIRST_RUN_DAYS = 14;
 const X_FIRST_RUN_DAYS = 7;
+const FACEBOOK_FIRST_RUN_DAYS = 14;
 // X costs money per item read, so check it less often than Nostr
 const X_MIN_INTERVAL_MIN = 30;
 const PAGE = 50;
@@ -81,7 +85,7 @@ export class InboxService {
           inBetweenSteps: false,
           refreshNeeded: false,
           type: 'social',
-          providerIdentifier: { in: INBOX_PROVIDERS },
+          providerIdentifier: { in: MENTION_PROVIDERS },
           ...(organizationId ? { organizationId } : {}),
         },
       });
@@ -89,6 +93,7 @@ export class InboxService {
         try {
           if (integration.providerIdentifier === 'nostr') await this.syncNostr(integration);
           if (integration.providerIdentifier === 'x') await this.syncX(integration, force);
+          if (integration.providerIdentifier === 'facebook') await this.syncFacebook(integration);
         } catch (err: any) {
           this._logger.warn(`${integration.providerIdentifier} ${integration.id}: ${err?.message || err}`);
         }
@@ -240,6 +245,42 @@ export class InboxService {
     await this.saveCursor(integration.id, { cursor: page.newestId || state?.cursor || null });
   }
 
+  private async syncFacebook(integration: Integration) {
+    const state = await this.cursor(integration.id);
+    const since = state?.since || dayjs().subtract(FACEBOOK_FIRST_RUN_DAYS, 'day').toDate();
+    const fb = new FacebookInbox(integration.internalId, await this.token(integration));
+    let page;
+    try {
+      page = await fb.comments(since);
+    } catch (err: any) {
+      await this.saveCursor(integration.id, { error: clip(err?.message || String(err), 500) });
+      throw err;
+    }
+    const muted = await this.mutedAuthors(integration.organizationId, 'facebook');
+    for (const c of page.items.filter((i) => !muted.has(i.author.id))) {
+      await this.upsertPerson(integration.organizationId, 'facebook', c.author.id, { name: c.author.name });
+      await this._prisma.inboxItem.upsert({
+        where: { integrationId_externalId: { integrationId: integration.id, externalId: c.id } },
+        create: {
+          organizationId: integration.organizationId,
+          integrationId: integration.id,
+          platform: 'facebook',
+          externalId: c.id,
+          kind: 'reply',
+          authorId: c.author.id,
+          content: clip(c.text, 5000) || '',
+          url: c.url,
+          inReplyToId: c.targetId,
+          inReplyToText: clip(c.targetText, 280),
+          raw: JSON.stringify({ thread: c.threadId }),
+          publishedAt: c.createdAt,
+        },
+        update: {},
+      });
+    }
+    await this.saveCursor(integration.id, { since: page.newest, error: null });
+  }
+
   // ---------- reading ----------
 
   async list(organizationId: string, f: InboxFilters) {
@@ -290,7 +331,18 @@ export class InboxService {
       _count: { _all: true },
     });
     const byChannel = Object.fromEntries(rows.map((r) => [r.integrationId, r._count._all]));
-    return { unread: rows.reduce((s, r) => s + r._count._all, 0), byChannel };
+    return { unread: rows.reduce((s, r) => s + r._count._all, 0), byChannel, problems: await this.problems(organizationId) };
+  }
+
+  /** Last fetch problem per Facebook channel (e.g. a permission Meta took away). */
+  async problems(organizationId: string): Promise<Record<string, string>> {
+    const channels = await this._prisma.integration.findMany({
+      where: { organizationId, deletedAt: null, providerIdentifier: 'facebook' },
+      select: { id: true },
+    });
+    if (!channels.length) return {};
+    const rows = await this._prisma.inboxCursor.findMany({ where: { integrationId: { in: channels.map((c) => c.id) }, error: { not: null } } });
+    return Object.fromEntries(rows.map((r) => [r.integrationId, r.error as string]));
   }
 
   async tags(organizationId: string) {
@@ -382,6 +434,17 @@ export class InboxService {
       if (action === 'like') await x.like(integration.internalId, item.externalId);
       const link = (action === 'reply' || action === 'quote') && hasLink(clean);
       await this.charge(integration, 'write', 'x-write', link ? { urlWrites: 1 } : { writes: 1 });
+    } else if (item.platform === 'facebook') {
+      if (action === 'repost' || action === 'quote') throw new Error('Facebook comments can be replied to or liked');
+      const fb = new FacebookInbox(integration.internalId, await this.token(integration));
+      let thread = item.externalId;
+      try {
+        thread = JSON.parse(item.raw || '{}').thread || thread;
+      } catch {
+        // keep the comment itself
+      }
+      if (action === 'reply') externalId = await fb.reply(thread, clean);
+      if (action === 'like') await fb.like(item.externalId);
     } else {
       throw new Error('This channel does not support that yet');
     }

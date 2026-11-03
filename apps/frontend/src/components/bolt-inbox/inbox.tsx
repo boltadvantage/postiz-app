@@ -36,6 +36,8 @@ type Item = {
   person: Person | null;
 };
 
+const DM_PLATFORMS = ['nostr', 'x'];
+const MENTION_PLATFORMS = [...DM_PLATFORMS, 'facebook'];
 const KINDS: Array<{ value: Item['kind']; label: string }> = [
   { value: 'mention', label: 'Mentions' },
   { value: 'reply', label: 'Replies' },
@@ -137,12 +139,12 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
             {p?.muted && <span className="rounded-full bg-red-900/50 px-[8px] h-[20px] text-[11px] flex items-center">{t('muted', 'muted')}</span>}
             <span className="ms-auto flex items-center gap-[6px] text-[12px] text-textItemBlur whitespace-nowrap">
               <img src={channel?.picture || `/icons/platforms/${item.platform}.png`} className="w-[16px] h-[16px] rounded-full" alt="" />
-              {item.kind === 'reply' ? t('reply', 'Reply') : item.kind === 'quote' ? t('quote', 'Quote') : t('mention', 'Mention')} · {dayjs(item.publishedAt).fromNow()}
+              {item.platform === 'facebook' ? t('comment', 'Comment') : item.kind === 'reply' ? t('reply', 'Reply') : item.kind === 'quote' ? t('quote', 'Quote') : t('mention', 'Mention')} · {dayjs(item.publishedAt).fromNow()}
             </span>
           </div>
           {item.inReplyToText && (
             <div className="mt-[4px] text-[12px] text-textItemBlur border-s-2 border-newTableBorder ps-[8px]">
-              {item.kind === 'quote' ? t('quoted_your_post', 'Quoted your post:') : t('replying_to_you', 'Replying to your post:')} {short(item.platform === 'nostr' ? pretty(item.inReplyToText || '') : item.inReplyToText)}
+              {item.kind === 'quote' ? t('quoted_your_post', 'Quoted your post:') : item.platform === 'facebook' ? t('commenting_on', 'On:') : t('replying_to_you', 'Replying to your post:')} {short(item.platform === 'nostr' ? pretty(item.inReplyToText || '') : item.inReplyToText)}
             </div>
           )}
           <div className="mt-[6px] text-[14px] whitespace-pre-wrap break-words">{item.platform === 'nostr' ? pretty(item.content) : item.content}</div>
@@ -150,15 +152,19 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
             <button type="button" onClick={() => setOpen(open === 'reply' ? null : 'reply')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder">
               {t('reply', 'Reply')}{item.repliedAt ? ' ✓' : ''}
             </button>
-            <button type="button" onClick={() => setOpen(open === 'quote' ? null : 'quote')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder">
-              {t('quote', 'Quote')}{item.quotedAt ? ' ✓' : ''}
-            </button>
+            {item.platform !== 'facebook' && (
+              <button type="button" onClick={() => setOpen(open === 'quote' ? null : 'quote')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder">
+                {t('quote', 'Quote')}{item.quotedAt ? ' ✓' : ''}
+              </button>
+            )}
             <button type="button" disabled={busy || !!item.likedAt} onClick={() => act('like')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder disabled:opacity-50">
               {item.likedAt ? `♥ ${t('liked', 'Liked')}` : `♡ ${t('like', 'Like')}`}
             </button>
-            <button type="button" disabled={busy || !!item.repostedAt} onClick={() => act('repost')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder disabled:opacity-50">
-              {item.repostedAt ? t('reposted', 'Reposted') : t('repost', 'Repost')}
-            </button>
+            {item.platform !== 'facebook' && (
+              <button type="button" disabled={busy || !!item.repostedAt} onClick={() => act('repost')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder disabled:opacity-50">
+                {item.repostedAt ? t('reposted', 'Reposted') : t('repost', 'Repost')}
+              </button>
+            )}
             {item.url && (
               <a href={item.url} target="_blank" rel="noreferrer" className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder flex items-center">
                 {t('open', 'Open')}
@@ -213,14 +219,15 @@ export const Inbox = () => {
     ...(search ? { q: search } : {}),
   }).toString();
   const { data, mutate, isLoading } = useSWR<{ total: number; pages: number; items: Item[] }>(view === 'mentions' ? `/inbox?${query}` : null, get, { refreshInterval: 60000 });
-  const { data: counts, mutate: mutateCounts } = useSWR<{ unread: number; byChannel: Record<string, number>; messages: number; xPaused?: boolean }>('/inbox/counts', get, { refreshInterval: 60000 });
+  const { data: counts, mutate: mutateCounts } = useSWR<{ unread: number; byChannel: Record<string, number>; messages: number; xPaused?: boolean; problems?: Record<string, string> }>('/inbox/counts', get, { refreshInterval: 60000 });
   const { data: tags, mutate: mutateTags } = useSWR<Array<{ tag: string; people: number }>>('/inbox/tags', get);
   const { data: muted, mutate: mutateMuted } = useSWR<Person[]>('/inbox/people?muted=true', get);
   // the app's shared channel list (other screens cache this key as a plain array)
   const { data: integrations } = useIntegrationList();
+  // Facebook Pages have comments here but no messages (yet)
   const channelList = useMemo(
-    () => ((integrations || []) as Channel[]).filter((c) => ['nostr', 'x'].includes(c.identifier)),
-    [integrations]
+    () => ((integrations || []) as Channel[]).filter((c) => (view === 'messages' ? DM_PLATFORMS : MENTION_PLATFORMS).includes(c.identifier)),
+    [integrations, view]
   );
   const channelById = useMemo(() => new Map(channelList.map((c) => [c.id, c])), [channelList]);
   const refresh = useCallback(() => {
@@ -292,7 +299,7 @@ export const Inbox = () => {
               {view === 'mentions' && !!counts?.byChannel[c.id] && <span className="ms-auto text-[11px]">{counts.byChannel[c.id]}</span>}
             </button>
           ))}
-          {!channelList.length && <div className="text-[12px] text-textItemBlur">{t('inbox_no_channels', 'Connect X or Nostr to use the inbox.')}</div>}
+          {!channelList.length && <div className="text-[12px] text-textItemBlur">{t('inbox_no_channels', 'Connect X, Nostr or a Facebook Page to use the inbox.')}</div>}
         </div>
         <div className={clsx(side, view === 'messages' && 'hidden')}>
           <div className="text-[11px] uppercase text-textItemBlur tracking-wide">{t('type', 'Type')}</div>
@@ -362,6 +369,12 @@ export const Inbox = () => {
             {t('x_paused_budget', "X paused: the inbox's share of today's X budget is used up, so X isn't checked again until it resets at midnight UTC. Nostr is still checked. You can raise it in Settings.")}
           </div>
         )}
+        {view === 'mentions' &&
+          Object.entries(counts?.problems || {}).map(([id, msg]) => (
+            <div key={id} className="px-[12px] py-[8px] rounded-[8px] border border-amber-500/40 bg-amber-500/10 text-[13px]">
+              <b>{channelById.get(id)?.name || t('channel', 'Channel')}:</b> {msg}
+            </div>
+          ))}
         {view === 'messages' ? (
           <Messages
             status={status}
