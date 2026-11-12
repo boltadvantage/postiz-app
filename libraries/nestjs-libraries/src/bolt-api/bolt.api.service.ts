@@ -4,6 +4,7 @@
 import { Injectable } from '@nestjs/common';
 import { INBOX_ACTIONS, InboxService } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
 import { DmService } from '@gitroom/nestjs-libraries/bolt-inbox/dm.service';
+import { FollowsService } from '@gitroom/nestjs-libraries/bolt-inbox/follows.service';
 import { QueueService } from '@gitroom/nestjs-libraries/bolt-queue/queue.service';
 import { PauseService } from '@gitroom/nestjs-libraries/bolt-queue/pause.service';
 import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
@@ -43,7 +44,8 @@ export class BoltApiService {
     private _pause: PauseService,
     private _posts: PostsService,
     private _analytics: BoltAnalyticsQueries,
-    private _costs: CostsService
+    private _costs: CostsService,
+    private _follows: FollowsService
   ) {}
 
   // ---------- client costs ----------
@@ -99,6 +101,38 @@ export class BoltApiService {
   markInbox(orgId: string, ids: string[], action: string) {
     if (!['read', 'unread', 'archive', 'unarchive'].includes(action)) throw new Error('action must be read, unread, archive or unarchive');
     return this._inbox.mark(orgId, ids.map(String), action as any);
+  }
+
+  // ---------- follows ----------
+
+  async follows(orgId: string, f: { status?: string; channels?: string[]; tag?: string; q?: string; page?: number; showMuted?: boolean }) {
+    const r = await this._follows.list(orgId, {
+      status: status(f.status),
+      integrationIds: f.channels?.length ? f.channels : undefined,
+      tag: f.tag || undefined,
+      q: f.q ? String(f.q).slice(0, 200) : undefined,
+      page: Math.max(0, Number(f.page) || 0),
+      showMuted: !!f.showMuted,
+    });
+    return {
+      untrusted: UNTRUSTED_NOTE,
+      followsOff: r.off,
+      total: r.total,
+      pages: r.pages,
+      follows: r.items.map((x: any) => ({
+        id: x.id,
+        integrationId: x.integrationId,
+        platform: x.platform,
+        event: x.event,
+        at: iso(x.at),
+        followers: x.followers,
+        verified: x.verified,
+        read: !!x.readAt,
+        archived: !!x.archivedAt,
+        followedBack: !!x.followedBackAt,
+        person: person(x.person),
+      })),
+    };
   }
 
   // ---------- direct messages ----------

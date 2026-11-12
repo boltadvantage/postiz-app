@@ -315,6 +315,30 @@ model InboxPerson {
   @@index([organizationId, muted])
 }
 
+/// Bolt Advantage: someone who followed (or unfollowed) a channel. Every one
+/// is kept; each channel's Follows setting decides which show in the inbox.
+model InboxFollow {
+  id             String    @id @default(cuid())
+  organizationId String
+  integrationId  String
+  platform       String
+  authorId       String
+  /// follow | unfollow
+  event          String
+  /// their own follower count when seen; null when unknown
+  followers      Int?
+  /// X: verified account; Nostr: their NIP-05 address checks out
+  verified       Boolean   @default(false)
+  at             DateTime
+  readAt         DateTime?
+  archivedAt     DateTime?
+  followedBackAt DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@unique([integrationId, authorId, event])
+  @@index([organizationId, at])
+}
+
 /// Bolt Advantage: where each channel's inbox fetch left off. Mentions use the
 /// channel id; direct messages use "dm:<channel id>".
 model InboxCursor {

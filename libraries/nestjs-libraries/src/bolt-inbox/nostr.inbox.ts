@@ -214,6 +214,20 @@ export class NostrInbox {
     return new Map(events.map((e) => [e.id, e]));
   }
 
+  /** Follow lists (kind 3) that name `pubkey`, published since `since`. */
+  async followLists(relays: string[], pubkey: string, since: Date) {
+    return this.pool.querySync(relays, { kinds: [3], '#p': [pubkey], since: Math.floor(since.getTime() / 1000), limit: 500 }, { maxWait: MAX_WAIT });
+  }
+
+  /** The newest follow list of each of these people (to see who dropped you). */
+  async listsOf(relays: string[], pubkeys: string[]) {
+    const out: Event[] = [];
+    for (let i = 0; i < pubkeys.length; i += 200) {
+      out.push(...(await this.pool.querySync(relays, { kinds: [3], authors: pubkeys.slice(i, i + 200) }, { maxWait: MAX_WAIT })));
+    }
+    return out;
+  }
+
   /** Sign and send; resolves once at least one relay accepts it. */
   async publish(relays: string[], template: EventTemplate, secretHex: string) {
     const signed = finalizeEvent(template, secretKeyFromHex(secretHex));

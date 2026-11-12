@@ -149,13 +149,67 @@ export const SelectionBar: FC<{
   );
 };
 
-/** Turn checking a channel's mentions/comments or messages on and off. */
+export type FollowSetting = { on: boolean; verified: boolean; minFollowers: number };
+
+/** A channel's Follows setting: off, everyone, or only notable followers. */
+const FollowSettingRow: FC<{ channel: Channel; setting?: FollowSetting; onChanged: () => void }> = ({ channel, setting, onChanged }) => {
+  const t = useT();
+  const fetch = useFetch();
+  const toaster = useToaster();
+  const s = setting || { on: false, verified: false, minFollowers: 0 };
+  const [min, setMin] = useState(s.minFollowers ? String(s.minFollowers) : '');
+  const save = async (input: Partial<FollowSetting>) => {
+    const res = await fetch(`/inbox/follows/settings/${channel.id}`, { method: 'PUT', body: JSON.stringify(input) });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return toaster.show(body?.message || t('could_not_save', 'Could not save'), 'warning');
+    }
+    onChanged();
+  };
+  return (
+    <>
+      <label className="flex items-center gap-[6px] cursor-pointer">
+        <input type="checkbox" checked={s.on} onChange={(e) => save({ on: e.target.checked })} />
+        {t('check_follows', 'Show new followers')}
+      </label>
+      {s.on && (
+        <div className="flex flex-col gap-[4px] ps-[20px]">
+          <span>{t('follows_only', 'Only show them if they are…')}</span>
+          <label className="flex items-center gap-[6px] cursor-pointer">
+            <input type="checkbox" checked={s.verified} onChange={(e) => save({ verified: e.target.checked })} />
+            {channel.identifier === 'nostr' ? t('follows_verified_nostr', 'verified (NIP-05)') : t('follows_verified', 'verified')}
+          </label>
+          <label className="flex items-center gap-[6px]">
+            {t('follows_or_min', 'or have at least')}
+            <input
+              type="number"
+              min="0"
+              inputMode="numeric"
+              value={min}
+              placeholder="0"
+              onChange={(e) => setMin(e.target.value)}
+              onBlur={() => Number(min || 0) !== s.minFollowers && save({ minFollowers: Number(min || 0) })}
+              className="w-[80px] h-[24px] rounded-[4px] bg-newBgColorInner border border-newTableBorder px-[6px] text-textColor"
+            />
+            {t('followers_word', 'followers')}
+          </label>
+          <span>{t('follows_filter_help', 'Leave both empty to show everyone.')}</span>
+        </div>
+      )}
+    </>
+  );
+};
+
+/** Turn checking a channel's mentions/comments, messages or follows on and off. */
 export const ChannelSwitches: FC<{
   channels: Channel[];
   off: { mentions: string[]; messages: string[] };
   dmPlatforms: string[];
   onChanged: () => void;
-}> = ({ channels, off, dmPlatforms, onChanged }) => {
+  follows?: Record<string, FollowSetting>;
+  followPlatforms?: string[];
+  onFollowsChanged?: () => void;
+}> = ({ channels, off, dmPlatforms, onChanged, follows, followPlatforms = [], onFollowsChanged }) => {
   const t = useT();
   const fetch = useFetch();
   const toaster = useToaster();
@@ -185,6 +239,9 @@ export const ChannelSwitches: FC<{
                 <input type="checkbox" checked={!off.messages.includes(c.id)} onChange={(e) => set(c.id, 'messages', e.target.checked)} />
                 {t('check_messages', 'Check messages')}
               </label>
+            )}
+            {follows && followPlatforms.includes(c.identifier) && (
+              <FollowSettingRow channel={c} setting={follows[c.id]} onChanged={() => onFollowsChanged?.()} />
             )}
           </div>
         ))}

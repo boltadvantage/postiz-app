@@ -51,6 +51,21 @@ export class PublicBoltController {
     return wrap(() => this._api.respond(org.id, id, action, body?.text));
   }
 
+  // ---------- follows ----------
+
+  @Get('/follows')
+  follows(
+    @GetOrgFromRequest() org: Organization,
+    @Query('status') status?: string,
+    @Query('channels') channels?: string,
+    @Query('tag') tag?: string,
+    @Query('q') q?: string,
+    @Query('showMuted') showMuted?: string,
+    @Query('page') page?: string
+  ) {
+    return this._api.follows(org.id, { status, channels: list(channels), tag, q, showMuted: showMuted === 'true', page: Number(page) || 0 });
+  }
+
   // ---------- direct messages ----------
 
   @Get('/messages')

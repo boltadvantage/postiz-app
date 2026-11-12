@@ -6,6 +6,8 @@ import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.reque
 import { INBOX_ACTIONS, InboxService } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
 import { DmService } from '@gitroom/nestjs-libraries/bolt-inbox/dm.service';
 import { inboxSwitches, setInboxSwitch } from '@gitroom/nestjs-libraries/bolt-inbox/switches';
+import { FollowsService } from '@gitroom/nestjs-libraries/bolt-inbox/follows.service';
+import { FOLLOW_PLATFORMS, saveFollowSetting } from '@gitroom/nestjs-libraries/bolt-inbox/follows';
 import { requireOrgAdmin } from '@gitroom/nestjs-libraries/user/require.org.admin';
 import { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
@@ -25,7 +27,8 @@ export class InboxController {
   constructor(
     private _inbox: InboxService,
     private _dms: DmService,
-    private _prisma: PrismaService
+    private _prisma: PrismaService,
+    private _follows: FollowsService
   ) {}
 
   private ids = (body: { ids?: unknown }) => {
@@ -74,8 +77,13 @@ export class InboxController {
 
   @Get('/counts')
   async counts(@GetOrgFromRequest() org: Organization) {
-    const [items, messages, xPaused] = await Promise.all([this._inbox.counts(org.id), this._dms.unreadCount(org.id), this._inbox.xPaused(org.id)]);
-    return { ...items, messages, xPaused };
+    const [items, messages, xPaused, follows] = await Promise.all([
+      this._inbox.counts(org.id),
+      this._dms.unreadCount(org.id),
+      this._inbox.xPaused(org.id),
+      this._follows.unreadCount(org.id),
+    ]);
+    return { ...items, messages, xPaused, follows };
   }
 
   @Get('/tags')
@@ -107,8 +115,68 @@ export class InboxController {
     this._inbox
       .syncAll(org.id, true)
       .then(() => this._dms.syncAll(org.id, true))
+      .then(() => this._follows.syncAll(org.id, true))
       .catch(() => undefined);
     return { started: true };
+  }
+
+  // ---------- follows (declared before /:id/:action) ----------
+
+  @Get('/follows')
+  follows(
+    @GetOrgFromRequest() org: Organization,
+    @Query('channels') channels?: string,
+    @Query('status') status?: string,
+    @Query('tag') tag?: string,
+    @Query('showMuted') showMuted?: string,
+    @Query('q') q?: string,
+    @Query('page') page?: string
+  ) {
+    return this._follows.list(org.id, {
+      integrationIds: list(channels),
+      status: (['unread', 'open', 'archived', 'all'].includes(status || '') ? status : 'open') as any,
+      tag: tag || undefined,
+      showMuted: showMuted === 'true',
+      q: q ? q.slice(0, 200) : undefined,
+      page: Number(page) || 0,
+    });
+  }
+
+  @Get('/follows/settings')
+  followSettings(@GetOrgFromRequest() org: Organization) {
+    return this._follows.settings(org.id);
+  }
+
+  @Put('/follows/settings/:id')
+  async saveFollowSettings(@GetOrgFromRequest() org: Organization, @Param('id') id: string, @Body() body: { on?: boolean; verified?: boolean; minFollowers?: number }) {
+    requireOrgAdmin(org);
+    const channel = await this._prisma.integration.findFirst({
+      where: { id, organizationId: org.id, deletedAt: null, providerIdentifier: { in: FOLLOW_PLATFORMS } },
+      select: { id: true },
+    });
+    if (!channel) throw new HttpException('Channel not found', 404);
+    const input: any = {};
+    if (typeof body?.on === 'boolean') input.on = body.on;
+    if (typeof body?.verified === 'boolean') input.verified = body.verified;
+    if (body?.minFollowers !== undefined) input.minFollowers = Number(body.minFollowers) || 0;
+    return saveFollowSetting(this._prisma, org.id, id, input);
+  }
+
+  @Post('/follows/mark')
+  markFollows(@GetOrgFromRequest() org: Organization, @Body() body: { ids?: string[]; action?: string }) {
+    const action = body?.action;
+    if (!['read', 'unread', 'archive', 'unarchive'].includes(action || '')) throw new HttpException('Bad request', 400);
+    return this._follows.mark(org.id, this.ids(body), action as any);
+  }
+
+  @Post('/follows/delete')
+  deleteFollows(@GetOrgFromRequest() org: Organization, @Body() body: { ids?: string[] }) {
+    return this._follows.remove(org.id, this.ids(body));
+  }
+
+  @Post('/follows/:id/follow-back')
+  followBack(@GetOrgFromRequest() org: Organization, @Param('id') id: string) {
+    return wrap(() => this._follows.followBack(org.id, id));
   }
 
   // ---------- direct messages (declared before /:id/:action so /dm/mark isn't taken for an item action) ----------

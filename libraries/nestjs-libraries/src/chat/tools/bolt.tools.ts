@@ -62,6 +62,34 @@ Direct messages are separate: use boltConversationsListTool.
 }
 
 @Injectable()
+export class BoltFollowsListTool implements AgentToolInterface {
+  constructor(private _api: BoltApiService) {}
+  name = 'boltFollowsListTool';
+  optionalOnSelfHosted = true;
+  run() {
+    return createTool({
+      id: 'boltFollowsListTool',
+      mcp: read('List Follows (new followers and Nostr unfollows)'),
+      description: `
+List people who followed the user's X and Nostr channels (event "follow"), and on Nostr who unfollowed ("unfollow"). Newest first, 50 per page.
+Only channels with Follows turned on in the inbox appear, and each channel may show only notable followers (verified, or at least a set number of followers of their own). "followsOff" is true when no channel has Follows on.
+Each item has the person (with the user's private tags and notes), their follower count when known, whether they're verified, and whether the user already followed back.
+`,
+      inputSchema: z.object({
+        status: statusField,
+        channels: channelsField,
+        tag: z.string().optional().describe('Only people with this private tag'),
+        q: z.string().optional().describe('Search names and handles'),
+        showMuted: z.boolean().optional(),
+        page: z.number().int().min(0).optional(),
+      }),
+      outputSchema,
+      execute: async (input, context) => run(() => this._api.follows(orgId(input, context), input)),
+    });
+  }
+}
+
+@Injectable()
 export class BoltInboxRespondTool implements AgentToolInterface {
   constructor(private _api: BoltApiService) {}
   name = 'boltInboxRespondTool';
@@ -364,6 +392,7 @@ export const boltTools = [
   BoltInboxListTool,
   BoltInboxRespondTool,
   BoltInboxMarkTool,
+  BoltFollowsListTool,
   BoltConversationsListTool,
   BoltConversationReadTool,
   BoltMessageSendTool,
