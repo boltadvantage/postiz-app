@@ -108,3 +108,88 @@ export const PersonPanel: FC<{ person: Person; allTags: string[]; onSaved: () =>
   );
 };
 
+
+/** Shown while items are selected: act on all of them at once. */
+export const SelectionBar: FC<{
+  count: number;
+  pageCount: number;
+  archived: boolean;
+  busy: boolean;
+  onAll: (on: boolean) => void;
+  onAction: (action: 'read' | 'archive' | 'unarchive' | 'delete') => void;
+}> = ({ count, pageCount, archived, busy, onAll, onAction }) => {
+  const t = useT();
+  const btn = 'px-[10px] h-[28px] rounded-[6px] border border-newTableBorder disabled:opacity-40';
+  return (
+    <div className="flex flex-wrap items-center gap-[6px] text-[12px] rounded-[8px] bg-newTableHeader px-[10px] py-[6px]">
+      <label className="flex items-center gap-[6px] cursor-pointer me-[6px]">
+        <input type="checkbox" checked={count > 0 && count === pageCount} onChange={(e) => onAll(e.target.checked)} />
+        {count ? t('n_selected', '{{n}} selected', { n: count }) : t('select_all_page', 'Select all on this page')}
+      </label>
+      {count > 0 && (
+        <>
+          <button type="button" disabled={busy} onClick={() => onAction('read')} className={btn}>{t('mark_read', 'Mark read')}</button>
+          <button type="button" disabled={busy} onClick={() => onAction(archived ? 'unarchive' : 'archive')} className={btn}>
+            {archived ? t('unarchive', 'Unarchive') : t('archive', 'Archive')}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              if (window.confirm(t('confirm_delete_inbox', 'Delete {{n}} from the inbox? This only removes them here, not on the social network, and can’t be undone.', { n: count }))) onAction('delete');
+            }}
+            className={`${btn} text-red-400`}
+          >
+            {t('delete', 'Delete')}
+          </button>
+          <button type="button" onClick={() => onAll(false)} className="px-[8px] h-[28px] underline">{t('clear', 'Clear')}</button>
+        </>
+      )}
+    </div>
+  );
+};
+
+/** Turn checking a channel's mentions/comments or messages on and off. */
+export const ChannelSwitches: FC<{
+  channels: Channel[];
+  off: { mentions: string[]; messages: string[] };
+  dmPlatforms: string[];
+  onChanged: () => void;
+}> = ({ channels, off, dmPlatforms, onChanged }) => {
+  const t = useT();
+  const fetch = useFetch();
+  const toaster = useToaster();
+  const set = async (id: string, what: 'mentions' | 'messages', on: boolean) => {
+    const res = await fetch(`/inbox/switches/${id}`, { method: 'PUT', body: JSON.stringify({ [what]: on }) });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return toaster.show(body?.message || t('could_not_save', 'Could not save'), 'warning');
+    }
+    onChanged();
+  };
+  return (
+    <details className="text-[12px] text-textItemBlur">
+      <summary className="cursor-pointer">{t('channel_checks', 'Turn channels on or off')}</summary>
+      <div className="flex flex-col gap-[8px] mt-[8px]">
+        {channels.map((c) => (
+          <div key={c.id} className="flex flex-col gap-[2px]">
+            <span className="text-textColor truncate">
+              {c.name} <span className="text-textItemBlur">({c.identifier})</span>
+            </span>
+            <label className="flex items-center gap-[6px] cursor-pointer">
+              <input type="checkbox" checked={!off.mentions.includes(c.id)} onChange={(e) => set(c.id, 'mentions', e.target.checked)} />
+              {c.identifier === 'facebook' ? t('check_comments', 'Check comments') : t('check_mentions', 'Check mentions')}
+            </label>
+            {dmPlatforms.includes(c.identifier) && (
+              <label className="flex items-center gap-[6px] cursor-pointer">
+                <input type="checkbox" checked={!off.messages.includes(c.id)} onChange={(e) => set(c.id, 'messages', e.target.checked)} />
+                {t('check_messages', 'Check messages')}
+              </label>
+            )}
+          </div>
+        ))}
+        <span>{t('channel_checks_help', 'Off means nothing new is fetched for it. What’s already here stays.')}</span>
+      </div>
+    </details>
+  );
+};

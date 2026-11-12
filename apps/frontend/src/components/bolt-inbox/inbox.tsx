@@ -3,7 +3,7 @@
 // Bolt Advantage: inbox — mentions, replies and quotes across channels, with
 // private tags and mutes per person, and reply / quote / repost / like in place,
 // plus direct messages (see messages.tsx).
-import React, { FC, useCallback, useMemo, useState } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import clsx from 'clsx';
 import dayjs from 'dayjs';
@@ -12,7 +12,7 @@ import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
-import { Channel, Person, PersonPanel, pretty, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
+import { Channel, ChannelSwitches, Person, PersonPanel, pretty, SelectionBar, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
 import { Messages } from '@gitroom/frontend/components/bolt-inbox/messages';
 import { useIntegrationList } from '@gitroom/frontend/components/launches/helpers/use.integration.list';
 import { ChannelAvatar } from '@gitroom/frontend/components/bolt-shared/channel.avatar';
@@ -95,7 +95,14 @@ const Composer: FC<{ mode: 'reply' | 'quote'; limit?: number; busy: boolean; onS
   );
 };
 
-const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () => void }> = ({ item, channel, allTags, refresh }) => {
+const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () => void; selected: boolean; onSelect: (on: boolean) => void }> = ({
+  item,
+  channel,
+  allTags,
+  refresh,
+  selected,
+  onSelect,
+}) => {
   const t = useT();
   const fetch = useFetch();
   const toaster = useToaster();
@@ -121,8 +128,9 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
   };
 
   return (
-    <div className={clsx('rounded-[8px] p-[12px] border', item.readAt ? 'bg-newTableHeader/50 border-transparent' : 'bg-newTableHeader border-[#612BD3]/50')}>
+    <div className={clsx('rounded-[8px] p-[12px] border', selected ? 'border-[#612BD3]' : item.readAt ? 'border-transparent' : 'border-[#612BD3]/50', item.readAt ? 'bg-newTableHeader/50' : 'bg-newTableHeader')}>
       <div className="flex gap-[10px]">
+        <input type="checkbox" checked={selected} onChange={(e) => onSelect(e.target.checked)} className="self-start mt-[10px] shrink-0 cursor-pointer" aria-label={t('select', 'Select')} />
         <div className="relative shrink-0 w-[36px] h-[36px]">
           <img src={p?.avatar || `/icons/platforms/${item.platform}.png`} className="w-[36px] h-[36px] rounded-full object-cover" alt="" />
           <img src={`/icons/platforms/${item.platform}.png`} className="w-[18px] h-[18px] rounded-[6px] absolute -bottom-[3px] -end-[5px] border border-fifth" alt={item.platform} />
@@ -207,6 +215,8 @@ export const Inbox = () => {
   const [q, setQ] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const get = useCallback(async (url: string) => (await fetch(url)).json(), []);
   const query = new URLSearchParams({
@@ -222,6 +232,8 @@ export const Inbox = () => {
   const { data: counts, mutate: mutateCounts } = useSWR<{ unread: number; byChannel: Record<string, number>; messages: number; xPaused?: boolean; problems?: Record<string, string> }>('/inbox/counts', get, { refreshInterval: 60000 });
   const { data: tags, mutate: mutateTags } = useSWR<Array<{ tag: string; people: number }>>('/inbox/tags', get);
   const { data: muted, mutate: mutateMuted } = useSWR<Person[]>('/inbox/people?muted=true', get);
+  const { data: switches, mutate: mutateSwitches } = useSWR<{ mentions: string[]; messages: string[] }>('/inbox/switches', get);
+  useEffect(() => setSelected([]), [query, view]);
   // the app's shared channel list (other screens cache this key as a plain array)
   const { data: integrations } = useIntegrationList();
   // Facebook Pages have comments here but no messages (yet)
@@ -257,6 +269,15 @@ export const Inbox = () => {
     const ids = (data?.items || []).filter((i) => !i.readAt).map((i) => i.id);
     if (!ids.length) return;
     await fetch('/inbox/mark', { method: 'POST', body: JSON.stringify({ ids, action: 'read' }) });
+    refresh();
+  };
+  const bulk = async (action: 'read' | 'archive' | 'unarchive' | 'delete') => {
+    if (!selected.length) return;
+    setBulkBusy(true);
+    const res = await fetch(action === 'delete' ? '/inbox/delete' : '/inbox/mark', { method: 'POST', body: JSON.stringify({ ids: selected, action }) });
+    setBulkBusy(false);
+    if (!res.ok) return toaster.show(t('could_not_save', 'Could not save'), 'warning');
+    if (action === 'delete' || action === 'archive' || action === 'unarchive') setSelected([]);
     refresh();
   };
   const unmute = async (p: Person) => {
@@ -295,11 +316,22 @@ export const Inbox = () => {
           {channelList.map((c) => (
             <button key={c.id} type="button" onClick={() => toggle(channels, setChannels, c.id)} className={clsx(pill(channels.includes(c.id)), '!h-[48px] !gap-[12px]')}>
               <ChannelAvatar picture={c.picture} platform={c.identifier} />
-              <span className="truncate">{c.name}</span>
+              <span className="flex flex-col min-w-0 leading-tight">
+                <span className="truncate">{c.name}</span>
+                {switches?.[view].includes(c.id) && <span className="text-[11px] opacity-70">{t('channel_off', 'off')}</span>}
+              </span>
               {view === 'mentions' && !!counts?.byChannel[c.id] && <span className="ms-auto text-[11px]">{counts.byChannel[c.id]}</span>}
             </button>
           ))}
           {!channelList.length && <div className="text-[12px] text-textItemBlur">{t('inbox_no_channels', 'Connect X, Nostr or a Facebook Page to use the inbox.')}</div>}
+          {!!switches && (
+            <ChannelSwitches
+              channels={((integrations || []) as Channel[]).filter((c) => MENTION_PLATFORMS.includes(c.identifier))}
+              off={switches}
+              dmPlatforms={DM_PLATFORMS}
+              onChanged={() => mutateSwitches()}
+            />
+          )}
         </div>
         <div className={clsx(side, view === 'messages' && 'hidden')}>
           <div className="text-[11px] uppercase text-textItemBlur tracking-wide">{t('type', 'Type')}</div>
@@ -393,7 +425,27 @@ export const Inbox = () => {
             {search || tag || kinds.length || channels.length ? t('inbox_nothing_matches', 'Nothing matches these filters.') : t('inbox_empty', 'Nothing here yet. New mentions show up within about 10 minutes.')}
           </div>
         ) : (
-          data.items.map((item) => <Row key={item.id} item={item} channel={channelById.get(item.integrationId)} allTags={(tags || []).map((x) => x.tag)} refresh={refresh} />)
+          <>
+            <SelectionBar
+              count={selected.length}
+              pageCount={data.items.length}
+              archived={status === 'archived'}
+              busy={bulkBusy}
+              onAll={(on) => setSelected(on ? data.items.map((i) => i.id) : [])}
+              onAction={bulk}
+            />
+            {data.items.map((item) => (
+              <Row
+                key={item.id}
+                item={item}
+                channel={channelById.get(item.integrationId)}
+                allTags={(tags || []).map((x) => x.tag)}
+                refresh={refresh}
+                selected={selected.includes(item.id)}
+                onSelect={(on) => setSelected((s) => (on ? [...s, item.id] : s.filter((x) => x !== item.id)))}
+              />
+            ))}
+          </>
         )}
         {view === 'mentions' && !!data && data.pages > 1 && (
           <div className="flex gap-[8px] justify-end text-[13px]">

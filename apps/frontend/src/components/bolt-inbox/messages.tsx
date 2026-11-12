@@ -10,7 +10,7 @@ import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
-import { Channel as InboxChannel, Person as InboxPerson, PersonPanel, pretty, Status as InboxStatus } from '@gitroom/frontend/components/bolt-inbox/shared';
+import { Channel as InboxChannel, Person as InboxPerson, PersonPanel, pretty, SelectionBar, Status as InboxStatus } from '@gitroom/frontend/components/bolt-inbox/shared';
 import { ChannelAvatar } from '@gitroom/frontend/components/bolt-shared/channel.avatar';
 
 type Conversation = {
@@ -177,6 +177,8 @@ export const Messages: FC<{
   const get = useCallback(async (url: string) => (await fetch(url)).json(), []);
   const [page, setPage] = useState(0);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const query = new URLSearchParams({
     status,
     page: String(page),
@@ -188,11 +190,23 @@ export const Messages: FC<{
   const { data, mutate, isLoading } = useSWR<{ total: number; pages: number; conversations: Conversation[] }>(`/inbox/dm?${query}`, get, { refreshInterval: 30000 });
   const { data: problems } = useSWR<Record<string, string>>('/inbox/dm/problems', get, { refreshInterval: 300000 });
   useEffect(() => setPage(0), [status, channels.join(','), tag, showMuted, search]);
+  useEffect(() => setSelected([]), [query]);
   const changed = () => {
     mutate();
     onChanged();
   };
   const open = data?.conversations.find((c) => c.id === openId) || null;
+  const bulk = async (action: 'read' | 'archive' | 'unarchive' | 'delete') => {
+    if (!selected.length) return;
+    setBulkBusy(true);
+    await fetch(action === 'delete' ? '/inbox/dm/delete' : '/inbox/dm/mark', { method: 'POST', body: JSON.stringify({ ids: selected, action }) });
+    setBulkBusy(false);
+    if (action !== 'read') {
+      if (openId && selected.includes(openId)) setOpenId(null);
+      setSelected([]);
+    }
+    changed();
+  };
 
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-[10px]">
@@ -210,13 +224,27 @@ export const Messages: FC<{
               {search || tag || channels.length ? t('inbox_nothing_matches', 'Nothing matches these filters.') : t('dm_empty', 'No messages yet. New ones show up within about 10 minutes.')}
             </div>
           ) : (
-            data.conversations.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setOpenId(c.id)}
-                className={clsx('w-full flex gap-[10px] p-[10px] text-start border-b border-newTableBorder/60', openId === c.id ? 'bg-newTableHeader shadow-[inset_3px_0_0_#612BD3]' : 'hover:bg-newTableHeader/60')}
-              >
+            <>
+              <div className="p-[6px] border-b border-newTableBorder/60">
+                <SelectionBar
+                  count={selected.length}
+                  pageCount={data.conversations.length}
+                  archived={status === 'archived'}
+                  busy={bulkBusy}
+                  onAll={(on) => setSelected(on ? data.conversations.map((c) => c.id) : [])}
+                  onAction={bulk}
+                />
+              </div>
+              {data.conversations.map((c) => (
+              <div key={c.id} className={clsx('flex items-start border-b border-newTableBorder/60', openId === c.id ? 'bg-newTableHeader shadow-[inset_3px_0_0_#612BD3]' : 'hover:bg-newTableHeader/60')}>
+              <input
+                type="checkbox"
+                checked={selected.includes(c.id)}
+                onChange={(e) => setSelected((s) => (e.target.checked ? [...s, c.id] : s.filter((x) => x !== c.id)))}
+                className="ms-[10px] mt-[22px] shrink-0 cursor-pointer"
+                aria-label={t('select', 'Select')}
+              />
+              <button type="button" onClick={() => setOpenId(c.id)} className="flex-1 min-w-0 flex gap-[10px] p-[10px] text-start">
                 <div className="relative shrink-0">
                   <img src={c.person?.avatar || `/icons/platforms/${c.platform}.png`} className="w-[38px] h-[38px] rounded-full object-cover" alt="" />
                   <img src={`/icons/platforms/${c.platform}.png`} className="w-[18px] h-[18px] rounded-[6px] absolute -bottom-[3px] -end-[5px] border border-fifth" alt={c.platform} />
@@ -236,7 +264,9 @@ export const Messages: FC<{
                   </div>
                 </div>
               </button>
-            ))
+              </div>
+              ))}
+            </>
           )}
           {!!data && data.pages > 1 && (
             <div className="flex gap-[8px] justify-center p-[8px] text-[12px]">

@@ -5,6 +5,9 @@ import { Organization } from '@prisma/client';
 import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
 import { INBOX_ACTIONS, InboxService } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
 import { DmService } from '@gitroom/nestjs-libraries/bolt-inbox/dm.service';
+import { inboxSwitches, setInboxSwitch } from '@gitroom/nestjs-libraries/bolt-inbox/switches';
+import { requireOrgAdmin } from '@gitroom/nestjs-libraries/user/require.org.admin';
+import { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 
 const list = (v?: string) => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : undefined);
@@ -21,8 +24,31 @@ const wrap = async <T>(fn: () => Promise<T>) => {
 export class InboxController {
   constructor(
     private _inbox: InboxService,
-    private _dms: DmService
+    private _dms: DmService,
+    private _prisma: PrismaService
   ) {}
+
+  private ids = (body: { ids?: unknown }) => {
+    if (!Array.isArray(body?.ids)) throw new HttpException('Bad request', 400);
+    return body.ids.map(String);
+  };
+
+  /** Which channels have mentions or messages switched off. */
+  @Get('/switches')
+  switches(@GetOrgFromRequest() org: Organization) {
+    return inboxSwitches(this._prisma, org.id);
+  }
+
+  @Put('/switches/:id')
+  async setSwitch(@GetOrgFromRequest() org: Organization, @Param('id') id: string, @Body() body: { mentions?: boolean; messages?: boolean }) {
+    requireOrgAdmin(org);
+    const channel = await this._prisma.integration.findFirst({ where: { id, organizationId: org.id, deletedAt: null }, select: { id: true } });
+    if (!channel) throw new HttpException('Channel not found', 404);
+    let next = await inboxSwitches(this._prisma, org.id);
+    if (typeof body?.mentions === 'boolean') next = await setInboxSwitch(this._prisma, org.id, id, 'mentions', body.mentions);
+    if (typeof body?.messages === 'boolean') next = await setInboxSwitch(this._prisma, org.id, id, 'messages', body.messages);
+    return next;
+  }
 
   @Get('/')
   items(
@@ -121,6 +147,11 @@ export class InboxController {
     return this._dms.mark(org.id, body.ids.map(String), action as any);
   }
 
+  @Post('/dm/delete')
+  deleteConversations(@GetOrgFromRequest() org: Organization, @Body() body: { ids?: string[] }) {
+    return this._dms.remove(org.id, this.ids(body));
+  }
+
   @Get('/dm/:id')
   messages(@GetOrgFromRequest() org: Organization, @Param('id') id: string, @Query('before') before?: string) {
     return wrap(() => this._dms.messages(org.id, id, before && !isNaN(Date.parse(before)) ? before : undefined));
@@ -138,6 +169,11 @@ export class InboxController {
       throw new HttpException('Bad request', 400);
     }
     return this._inbox.mark(org.id, body.ids.map(String), action as any);
+  }
+
+  @Post('/delete')
+  deleteItems(@GetOrgFromRequest() org: Organization, @Body() body: { ids?: string[] }) {
+    return this._inbox.remove(org.id, this.ids(body));
   }
 
   @Post('/:id/:action')
