@@ -63,15 +63,11 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
   oneTimeToken = true;
 
   isBetweenSteps = false;
-  scopes = [
-    'openid',
-    'profile',
-    'w_member_social',
-    'r_basicprofile',
-    'rw_organization_admin',
-    'w_organization_social',
-    'r_organization_social',
-  ];
+  // Bolt Advantage: a personal profile only needs the scopes LinkedIn grants
+  // instantly (Sign In with OpenID Connect + Share on LinkedIn). The others
+  // need Community Management API approval, and asking for them made LinkedIn
+  // refuse the connection outright. LinkedIn Pages keep the full list.
+  scopes = ['openid', 'profile', 'w_member_social'];
   override maxConcurrentJob = 8; // LinkedIn limits are daily budgets
   refreshWait = true;
   editor = 'normal' as const;
@@ -285,7 +281,7 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
     ).json();
 
     return {
-      options: elements.map((e: { localizedName: string; id: string }) => ({
+      options: (elements || []).map((e: { localizedName: string; id: string }) => ({
         label: e.localizedName,
         value: `@[${e.localizedName}](urn:li:organization:${e.id})`,
       }))?.[0],
@@ -1231,7 +1227,8 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
       )
     ).json();
 
-    return elements.map((p: any) => ({
+    // company lookups need Page permissions a personal connection may not have
+    return (elements || []).map((p: any) => ({
       id: String(p.id),
       label: p.localizedName,
       image:
