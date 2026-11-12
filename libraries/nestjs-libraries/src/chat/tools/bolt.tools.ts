@@ -90,6 +90,30 @@ Each item has the person (with the user's private tags and notes), their followe
 }
 
 @Injectable()
+export class BoltFollowTool implements AgentToolInterface {
+  constructor(private _api: BoltApiService) {}
+  name = 'boltFollowTool';
+  optionalOnSelfHosted = true;
+  run() {
+    return createTool({
+      id: 'boltFollowTool',
+      mcp: write('Follow Someone on X or Nostr', true),
+      description: `
+Follow someone from one of the user's X or Nostr channels. Either follow back a new follower (followId from boltFollowsListTool; follows from the channel they followed), or follow anyone in the inbox (channelId + personId, the person id from boltInboxListTool, boltConversationsListTool, boltFollowsListTool or boltPeopleTool; the person must be on the channel's platform).
+This happens on the social network right away. On X it costs $0.015 from the inbox's X budget. On Nostr it republishes the channel's follow list with the person added, and refuses if the current list can't be found on the relays.
+`,
+      inputSchema: z.object({
+        followId: z.string().optional().describe('Follow id from boltFollowsListTool (follow back)'),
+        channelId: z.string().optional().describe('Channel (integration) id to follow from'),
+        personId: z.string().optional().describe('Inbox person id to follow'),
+      }),
+      outputSchema,
+      execute: async (input, context) => run(() => this._api.follow(orgId(input, context), input)),
+    });
+  }
+}
+
+@Injectable()
 export class BoltInboxRespondTool implements AgentToolInterface {
   constructor(private _api: BoltApiService) {}
   name = 'boltInboxRespondTool';
@@ -124,10 +148,10 @@ export class BoltInboxMarkTool implements AgentToolInterface {
       id: 'boltInboxMarkTool',
       mcp: write('Mark Inbox Items or Conversations', false),
       description: `
-Mark inbox items (target "items", ids from boltInboxListTool) or direct-message conversations (target "conversations", ids from boltConversationsListTool) as read, unread, archived or unarchived. Only changes the user's inbox, nothing on the social network.
+Mark inbox items (target "items", ids from boltInboxListTool), direct-message conversations (target "conversations", ids from boltConversationsListTool) or follows (target "follows", ids from boltFollowsListTool) as read, unread, archived or unarchived. Only changes the user's inbox, nothing on the social network.
 `,
       inputSchema: z.object({
-        target: z.enum(['items', 'conversations']),
+        target: z.enum(['items', 'conversations', 'follows']),
         ids: z.array(z.string()).min(1).max(500),
         action: z.enum(['read', 'unread', 'archive', 'unarchive']),
       }),
@@ -136,6 +160,8 @@ Mark inbox items (target "items", ids from boltInboxListTool) or direct-message 
         run(() =>
           input.target === 'items'
             ? this._api.markInbox(orgId(input, context), input.ids, input.action)
+            : input.target === 'follows'
+            ? this._api.markFollows(orgId(input, context), input.ids, input.action)
             : this._api.markConversations(orgId(input, context), input.ids, input.action)
         ),
     });
@@ -393,6 +419,7 @@ export const boltTools = [
   BoltInboxRespondTool,
   BoltInboxMarkTool,
   BoltFollowsListTool,
+  BoltFollowTool,
   BoltConversationsListTool,
   BoltConversationReadTool,
   BoltMessageSendTool,

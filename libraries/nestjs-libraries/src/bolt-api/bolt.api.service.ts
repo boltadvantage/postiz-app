@@ -135,6 +135,18 @@ export class BoltApiService {
     };
   }
 
+  markFollows(orgId: string, ids: string[], action: string) {
+    if (!['read', 'unread', 'archive', 'unarchive'].includes(action)) throw new Error('action must be read, unread, archive or unarchive');
+    return this._follows.mark(orgId, ids.map(String), action as any);
+  }
+
+  /** Follow back someone from the Follows list (followId), or anyone in the inbox (channelId + personId). */
+  follow(orgId: string, input: { followId?: string; channelId?: string; personId?: string }) {
+    if (input.followId) return this._follows.followBack(orgId, String(input.followId));
+    if (input.channelId && input.personId) return this._follows.followPerson(orgId, String(input.channelId), String(input.personId));
+    throw new Error('Give followId, or channelId and personId');
+  }
+
   // ---------- direct messages ----------
 
   async conversations(orgId: string, f: { status?: string; channels?: string[]; tag?: string; q?: string; page?: number; showMuted?: boolean }) {

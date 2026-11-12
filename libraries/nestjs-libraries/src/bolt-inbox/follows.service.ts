@@ -251,11 +251,32 @@ export class FollowsService {
   async followBack(organizationId: string, id: string) {
     const follow = await this._prisma.inboxFollow.findFirst({ where: { id, organizationId } });
     if (!follow) throw new Error('Not found');
-    const integration = await this._prisma.integration.findFirst({ where: { id: follow.integrationId, organizationId, deletedAt: null } });
+    await this.follow(organizationId, follow.integrationId, follow.authorId);
+    const stamp = new Date();
+    await this._prisma.inboxFollow.update({ where: { id: follow.id }, data: { followedBackAt: stamp, readAt: follow.readAt || stamp } });
+    return { ok: true };
+  }
+
+  /** Follow someone the inbox knows (InboxPerson id) from one of the org's X or Nostr channels. */
+  async followPerson(organizationId: string, integrationId: string, personId: string) {
+    const person = await this._prisma.inboxPerson.findFirst({ where: { id: personId, organizationId } });
+    if (!person) throw new Error('Person not found');
+    const integration = await this._prisma.integration.findFirst({ where: { id: integrationId, organizationId, deletedAt: null } });
+    if (!integration) throw new Error('Channel not found');
+    if (integration.providerIdentifier !== person.platform) throw new Error(`That person is on ${person.platform}, not ${integration.providerIdentifier}`);
+    await this.follow(organizationId, integrationId, person.authorId);
+    // if they already follow this channel, show it as followed back
+    await this._prisma.inboxFollow.updateMany({ where: { integrationId, authorId: person.authorId, event: 'follow', followedBackAt: null }, data: { followedBackAt: new Date() } });
+    return { ok: true };
+  }
+
+  private async follow(organizationId: string, integrationId: string, authorId: string) {
+    const integration = await this._prisma.integration.findFirst({ where: { id: integrationId, organizationId, deletedAt: null } });
     if (!integration) throw new Error('That channel is no longer connected');
+    if (integration.internalId === authorId) throw new Error("A channel can't follow itself");
     if (integration.providerIdentifier === 'x') {
       const x = new XInbox(await this._inbox.token(integration));
-      await x.follow(integration.internalId, follow.authorId);
+      await x.follow(integration.internalId, authorId);
       await this._inbox.charge(integration, 'write', 'x-write', { writes: 1 });
     } else if (integration.providerIdentifier === 'nostr') {
       const nostr = new NostrInbox();
@@ -264,16 +285,13 @@ export class FollowsService {
         // publishing replaces the whole list, so start from the newest one the relays have
         const mine = newestLists(await nostr.listsOf(relays, [integration.internalId])).get(integration.internalId);
         if (!mine) throw new Error("Couldn't find your current follow list on your relays, so following from here could erase it. Follow them from a Nostr app instead.");
-        if (!followsSelf(mine, follow.authorId)) await nostr.publish(relays, withFollow(mine, follow.authorId), this._inbox.nostrSecret(integration));
+        if (!followsSelf(mine, authorId)) await nostr.publish(relays, withFollow(mine, authorId), this._inbox.nostrSecret(integration));
       } finally {
         nostr.close(relays);
       }
     } else {
-      throw new Error('This channel does not support that');
+      throw new Error('Following works on X and Nostr channels');
     }
-    const stamp = new Date();
-    await this._prisma.inboxFollow.update({ where: { id: follow.id }, data: { followedBackAt: stamp, readAt: follow.readAt || stamp } });
-    return { ok: true };
   }
 }
 
