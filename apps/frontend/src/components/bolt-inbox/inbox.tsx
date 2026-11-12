@@ -12,7 +12,8 @@ import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
-import { Channel, ChannelSwitches, Person, PersonPanel, pretty, SelectionBar, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
+import { Channel, ChannelSwitches, FollowSetting, Person, PersonPanel, pretty, SelectionBar, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
+import { Follows } from '@gitroom/frontend/components/bolt-inbox/follows';
 import { Messages } from '@gitroom/frontend/components/bolt-inbox/messages';
 import { useIntegrationList } from '@gitroom/frontend/components/launches/helpers/use.integration.list';
 import { ChannelAvatar } from '@gitroom/frontend/components/bolt-shared/channel.avatar';
@@ -38,6 +39,7 @@ type Item = {
 
 const DM_PLATFORMS = ['nostr', 'x'];
 const MENTION_PLATFORMS = [...DM_PLATFORMS, 'facebook'];
+const FOLLOW_PLATFORMS = ['x', 'nostr'];
 const KINDS: Array<{ value: Item['kind']; label: string }> = [
   { value: 'mention', label: 'Mentions' },
   { value: 'reply', label: 'Replies' },
@@ -206,7 +208,7 @@ export const Inbox = () => {
   const t = useT();
   const fetch = useFetch();
   const toaster = useToaster();
-  const [view, setView] = useState<'mentions' | 'messages'>('mentions');
+  const [view, setView] = useState<'mentions' | 'messages' | 'follows'>('mentions');
   const [status, setStatus] = useState<Status>('open');
   const [channels, setChannels] = useState<string[]>([]);
   const [kinds, setKinds] = useState<string[]>([]);
@@ -229,16 +231,20 @@ export const Inbox = () => {
     ...(search ? { q: search } : {}),
   }).toString();
   const { data, mutate, isLoading } = useSWR<{ total: number; pages: number; items: Item[] }>(view === 'mentions' ? `/inbox?${query}` : null, get, { refreshInterval: 60000 });
-  const { data: counts, mutate: mutateCounts } = useSWR<{ unread: number; byChannel: Record<string, number>; messages: number; xPaused?: boolean; problems?: Record<string, string> }>('/inbox/counts', get, { refreshInterval: 60000 });
+  const { data: counts, mutate: mutateCounts } = useSWR<{ unread: number; byChannel: Record<string, number>; messages: number; follows?: number; xPaused?: boolean; problems?: Record<string, string> }>('/inbox/counts', get, { refreshInterval: 60000 });
   const { data: tags, mutate: mutateTags } = useSWR<Array<{ tag: string; people: number }>>('/inbox/tags', get);
   const { data: muted, mutate: mutateMuted } = useSWR<Person[]>('/inbox/people?muted=true', get);
   const { data: switches, mutate: mutateSwitches } = useSWR<{ mentions: string[]; messages: string[] }>('/inbox/switches', get);
+  const { data: followSettings, mutate: mutateFollowSettings } = useSWR<Record<string, FollowSetting>>('/inbox/follows/settings', get);
   useEffect(() => setSelected([]), [query, view]);
   // the app's shared channel list (other screens cache this key as a plain array)
   const { data: integrations } = useIntegrationList();
   // Facebook Pages have comments here but no messages (yet)
   const channelList = useMemo(
-    () => ((integrations || []) as Channel[]).filter((c) => (view === 'messages' ? DM_PLATFORMS : MENTION_PLATFORMS).includes(c.identifier)),
+    () =>
+      ((integrations || []) as Channel[]).filter((c) =>
+        (view === 'messages' ? DM_PLATFORMS : view === 'follows' ? FOLLOW_PLATFORMS : MENTION_PLATFORMS).includes(c.identifier)
+      ),
     [integrations, view]
   );
   const channelById = useMemo(() => new Map(channelList.map((c) => [c.id, c])), [channelList]);
@@ -291,12 +297,12 @@ export const Inbox = () => {
   return (
     <div className="bg-newBgColorInner flex flex-1 min-h-0 mobile:flex-col">
       <div className="w-[230px] mobile:w-full shrink-0 p-[16px] flex flex-col gap-[18px] border-e border-newTableBorder overflow-y-auto">
-        <div className="grid grid-cols-2 gap-[4px] p-[3px] rounded-[8px] bg-newTableHeader text-[13px]">
-          {(['mentions', 'messages'] as const).map((v) => {
-            const n = v === 'mentions' ? counts?.unread : counts?.messages;
+        <div className="grid grid-cols-3 gap-[4px] p-[3px] rounded-[8px] bg-newTableHeader text-[12px]">
+          {(['mentions', 'messages', 'follows'] as const).map((v) => {
+            const n = v === 'mentions' ? counts?.unread : v === 'messages' ? counts?.messages : counts?.follows;
             return (
               <button key={v} type="button" onClick={() => (setView(v), setPage(0))} className={clsx('h-[30px] rounded-[6px] flex items-center justify-center gap-[6px]', view === v ? 'bg-[#612BD3] text-white' : 'hover:bg-newBgColorInner')}>
-                {v === 'mentions' ? t('mentions', 'Mentions') : t('messages', 'Messages')}
+                {v === 'mentions' ? t('mentions', 'Mentions') : v === 'messages' ? t('messages', 'Messages') : t('follows', 'Follows')}
                 {!!n && <span className="min-w-[16px] h-[16px] px-[4px] rounded-full bg-red-500 text-white text-[10px] font-[600] flex items-center justify-center">{n}</span>}
               </button>
             );
@@ -308,6 +314,7 @@ export const Inbox = () => {
               {s === 'open' ? t('inbox', 'Inbox') : s === 'unread' ? t('unread', 'Unread') : s === 'archived' ? t('archived', 'Archived') : t('all', 'All')}
               {s === 'unread' && view === 'mentions' && !!counts?.unread && <span className="ms-auto text-[11px]">{counts.unread}</span>}
               {s === 'unread' && view === 'messages' && !!counts?.messages && <span className="ms-auto text-[11px]">{counts.messages}</span>}
+              {s === 'unread' && view === 'follows' && !!counts?.follows && <span className="ms-auto text-[11px]">{counts.follows}</span>}
             </button>
           ))}
         </div>
@@ -318,7 +325,7 @@ export const Inbox = () => {
               <ChannelAvatar picture={c.picture} platform={c.identifier} />
               <span className="flex flex-col min-w-0 leading-tight">
                 <span className="truncate">{c.name}</span>
-                {switches?.[view].includes(c.id) && <span className="text-[11px] opacity-70">{t('channel_off', 'off')}</span>}
+                {(view === 'follows' ? !followSettings?.[c.id]?.on : switches?.[view].includes(c.id)) && <span className="text-[11px] opacity-70">{t('channel_off', 'off')}</span>}
               </span>
               {view === 'mentions' && !!counts?.byChannel[c.id] && <span className="ms-auto text-[11px]">{counts.byChannel[c.id]}</span>}
             </button>
@@ -330,10 +337,16 @@ export const Inbox = () => {
               off={switches}
               dmPlatforms={DM_PLATFORMS}
               onChanged={() => mutateSwitches()}
+              follows={followSettings}
+              followPlatforms={FOLLOW_PLATFORMS}
+              onFollowsChanged={() => {
+                mutateFollowSettings();
+                refresh();
+              }}
             />
           )}
         </div>
-        <div className={clsx(side, view === 'messages' && 'hidden')}>
+        <div className={clsx(side, view !== 'mentions' && 'hidden')}>
           <div className="text-[11px] uppercase text-textItemBlur tracking-wide">{t('type', 'Type')}</div>
           {KINDS.map((k) => (
             <button key={k.value} type="button" onClick={() => toggle(kinds, setKinds, k.value)} className={pill(kinds.includes(k.value))}>
@@ -374,7 +387,7 @@ export const Inbox = () => {
 
       <div className="flex-1 min-w-0 p-[16px] flex flex-col gap-[12px] overflow-y-auto">
         <div className="flex flex-wrap items-center gap-[10px]">
-          <h2 className="text-[20px] font-[500] me-auto">{view === 'messages' ? t('messages', 'Messages') : t('inbox', 'Inbox')}</h2>
+          <h2 className="text-[20px] font-[500] me-auto">{view === 'messages' ? t('messages', 'Messages') : view === 'follows' ? t('follows', 'Follows') : t('inbox', 'Inbox')}</h2>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -385,11 +398,11 @@ export const Inbox = () => {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder={view === 'messages' ? t('search_messages', 'Search people or messages…') : t('search_inbox', 'Search…')}
+              placeholder={view === 'messages' ? t('search_messages', 'Search people or messages…') : view === 'follows' ? t('search_people', 'Search people…') : t('search_inbox', 'Search…')}
               className="bg-newTableHeader border border-newTableBorder rounded-[8px] h-[34px] px-[12px] text-[13px] outline-none w-[220px]"
             />
           </form>
-          <button type="button" onClick={markAllRead} className={clsx('px-[12px] h-[34px] rounded-[8px] border border-newTableBorder text-[13px] whitespace-nowrap', view === 'messages' && 'hidden')}>
+          <button type="button" onClick={markAllRead} className={clsx('px-[12px] h-[34px] rounded-[8px] border border-newTableBorder text-[13px] whitespace-nowrap', view !== 'mentions' && 'hidden')}>
             {t('mark_page_read', 'Mark all read')}
           </button>
           <button type="button" onClick={syncNow} className="px-[12px] h-[34px] rounded-[8px] bg-[#612BD3] text-white text-[13px] whitespace-nowrap">
@@ -407,7 +420,18 @@ export const Inbox = () => {
               <b>{channelById.get(id)?.name || t('channel', 'Channel')}:</b> {msg}
             </div>
           ))}
-        {view === 'messages' ? (
+        {view === 'follows' ? (
+          <Follows
+            status={status}
+            channels={channels}
+            tag={tag}
+            showMuted={showMuted}
+            search={search}
+            channelById={channelById}
+            allTags={(tags || []).map((x) => x.tag)}
+            onChanged={refresh}
+          />
+        ) : view === 'messages' ? (
           <Messages
             status={status}
             channels={channels}

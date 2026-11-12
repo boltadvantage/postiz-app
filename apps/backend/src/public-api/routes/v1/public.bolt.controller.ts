@@ -51,6 +51,32 @@ export class PublicBoltController {
     return wrap(() => this._api.respond(org.id, id, action, body?.text));
   }
 
+  // ---------- follows ----------
+
+  @Get('/follows')
+  follows(
+    @GetOrgFromRequest() org: Organization,
+    @Query('status') status?: string,
+    @Query('channels') channels?: string,
+    @Query('tag') tag?: string,
+    @Query('q') q?: string,
+    @Query('showMuted') showMuted?: string,
+    @Query('page') page?: string
+  ) {
+    return this._api.follows(org.id, { status, channels: list(channels), tag, q, showMuted: showMuted === 'true', page: Number(page) || 0 });
+  }
+
+  @Post('/follows/mark')
+  markFollows(@GetOrgFromRequest() org: Organization, @Body() body: { ids?: string[]; action?: string }) {
+    return wrap(() => this._api.markFollows(org.id, ids(body), body.action!));
+  }
+
+  /** Body: { followId } to follow back, or { channelId, personId } to follow anyone in the inbox. */
+  @Post('/follow')
+  follow(@GetOrgFromRequest() org: Organization, @Body() body: { followId?: string; channelId?: string; personId?: string }) {
+    return wrap(() => this._api.follow(org.id, body || {}));
+  }
+
   // ---------- direct messages ----------
 
   @Get('/messages')

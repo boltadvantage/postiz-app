@@ -3,6 +3,7 @@
 import { TwitterApi } from 'twitter-api-v2';
 import type { InboxKind } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.inbox';
 import type { XResources } from '@gitroom/nestjs-libraries/bolt-costs/x-billing';
+import { parseXFollowers } from '@gitroom/nestjs-libraries/bolt-inbox/follows';
 
 export type IncomingX = {
   id: string;
@@ -88,6 +89,25 @@ export class XInbox {
   async quote(tweetId: string, text: string) {
     const r = await this.client.v2.tweet({ text, quote_tweet_id: tweetId });
     return r.data.id;
+  }
+
+  /** The account's follower total (one owned user read). */
+  async followerCount(userId: string) {
+    const r = await this.client.v2.user(userId, { 'user.fields': ['public_metrics'] });
+    return r.data?.public_metrics?.followers_count ?? null;
+  }
+
+  /** Newest followers first. */
+  async followers(userId: string, max: number) {
+    const r: any = await this.client.v2.followers(userId, {
+      max_results: Math.min(1000, Math.max(1, max)),
+      'user.fields': ['username', 'name', 'profile_image_url', 'verified', 'verified_type', 'public_metrics'],
+    });
+    return parseXFollowers(r);
+  }
+
+  async follow(userId: string, targetId: string) {
+    await this.client.v2.follow(userId, targetId);
   }
 }
 
