@@ -11,6 +11,7 @@ import { NostrInbox, secretKeyFromHex } from '@gitroom/nestjs-libraries/bolt-inb
 import { DmProtocol, NostrDms } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.dm';
 import { isDmPermissionError, XDms, xIdAfter } from '@gitroom/nestjs-libraries/bolt-inbox/x.inbox';
 import { worstItem, xBudgetSettings } from '@gitroom/nestjs-libraries/bolt-costs/x-billing';
+import { switchChecker } from '@gitroom/nestjs-libraries/bolt-inbox/switches';
 
 const LOCK_KEY = 'bolt-dm:lock';
 const FIRST_RUN_DAYS = 14;
@@ -58,8 +59,10 @@ export class DmService {
           ...(organizationId ? { organizationId } : {}),
         },
       });
+      const isOff = switchChecker(this._prisma, 'messages');
       for (const integration of integrations) {
         try {
+          if (await isOff(integration)) continue;
           if (integration.providerIdentifier === 'nostr') await this.syncNostr(integration);
           if (integration.providerIdentifier === 'x') await this.syncX(integration, force);
         } catch (err: any) {
@@ -276,6 +279,16 @@ export class DmService {
     const data = action === 'read' ? { unread: 0 } : action === 'archive' ? { archivedAt: new Date(), unread: 0 } : { archivedAt: null };
     const r = await this._prisma.inboxConversation.updateMany({ where, data });
     return { updated: r.count };
+  }
+
+  /** Removes conversations and their messages from the inbox only; nothing changes on the social network. */
+  async remove(organizationId: string, ids: string[]) {
+    const own = await this._prisma.inboxConversation.findMany({ where: { organizationId, id: { in: ids.slice(0, 500) } }, select: { id: true } });
+    const conversationIds = own.map((c) => c.id);
+    if (!conversationIds.length) return { deleted: 0 };
+    await this._prisma.inboxMessage.deleteMany({ where: { organizationId, conversationId: { in: conversationIds } } });
+    const r = await this._prisma.inboxConversation.deleteMany({ where: { organizationId, id: { in: conversationIds } } });
+    return { deleted: r.count };
   }
 
   async unreadCount(organizationId: string) {

@@ -12,6 +12,7 @@ import { isLocked, withLock } from '@gitroom/nestjs-libraries/redis/bolt.lock';
 import { buildLike, buildQuote, buildReply, buildRepost, InboxKind, NostrInbox } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.inbox';
 import { XInbox } from '@gitroom/nestjs-libraries/bolt-inbox/x.inbox';
 import { FacebookInbox } from '@gitroom/nestjs-libraries/bolt-inbox/facebook.inbox';
+import { switchChecker } from '@gitroom/nestjs-libraries/bolt-inbox/switches';
 import { UsageKind } from '@gitroom/nestjs-libraries/bolt-costs/usage';
 import { chargeX, hasLink, worstItem, xBudgetLeft, xBudgetSettings, XPool, XResources } from '@gitroom/nestjs-libraries/bolt-costs/x-billing';
 
@@ -89,8 +90,10 @@ export class InboxService {
           ...(organizationId ? { organizationId } : {}),
         },
       });
+      const isOff = switchChecker(this._prisma, 'mentions');
       for (const integration of integrations) {
         try {
+          if (await isOff(integration)) continue;
           if (integration.providerIdentifier === 'nostr') await this.syncNostr(integration);
           if (integration.providerIdentifier === 'x') await this.syncX(integration, force);
           if (integration.providerIdentifier === 'facebook') await this.syncFacebook(integration);
@@ -380,6 +383,12 @@ export class InboxService {
       action === 'read' ? { readAt: new Date() } : action === 'unread' ? { readAt: null } : action === 'archive' ? { archivedAt: new Date(), readAt: new Date() } : { archivedAt: null };
     const r = await this._prisma.inboxItem.updateMany({ where: { organizationId, id: { in: ids.slice(0, 500) } }, data });
     return { updated: r.count };
+  }
+
+  /** Removes items from the inbox only; nothing changes on the social network. */
+  async remove(organizationId: string, ids: string[]) {
+    const r = await this._prisma.inboxItem.deleteMany({ where: { organizationId, id: { in: ids.slice(0, 500) } } });
+    return { deleted: r.count };
   }
 
   // ---------- acting ----------
