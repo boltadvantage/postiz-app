@@ -13,6 +13,7 @@ import { useVariables } from '@gitroom/react/helpers/variable.context';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
 import { ChannelAvatar } from '@gitroom/frontend/components/bolt-shared/channel.avatar';
+import { ClientCosts } from '@gitroom/frontend/components/bolt-analytics/client.costs';
 dayjs.extend(relativeTime);
 
 type Channel = { id: string; name: string; picture: string | null; providerIdentifier: string };
@@ -265,6 +266,8 @@ export const History = () => {
           })}
         </div>
       )}
+
+      <ClientCosts />
 
       {summary.length === 0 ? (
         <div className="text-[14px] text-textItemBlur">{t('history_no_channels', 'Connect a channel to start saving its history.')}</div>
