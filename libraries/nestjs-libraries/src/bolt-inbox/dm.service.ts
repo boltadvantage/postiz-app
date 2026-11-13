@@ -204,6 +204,7 @@ export class DmService {
     const since = state?.since || dayjs().subtract(META_FIRST_RUN_HOURS, 'hour').toDate();
     const meta = new MetaDms(integration.providerIdentifier as MetaPlatform, await this._inbox.token(integration));
     try {
+      await this.ensureSubscribed(integration, meta);
       const res = await meta.since(integration.internalId, since);
       await this.store(
         integration,
@@ -218,6 +219,20 @@ export class DmService {
         return;
       }
       throw err;
+    }
+  }
+
+  /** Once per connection: a reconnect changes the channel, so it subscribes again then. */
+  private async ensureSubscribed(integration: Integration, meta: MetaDms) {
+    const id = `meta-sub:${integration.id}`;
+    const state = await this._inbox.cursor(id);
+    if (state?.cursor === 'ok' && state.lastRunAt && state.lastRunAt >= integration.updatedAt) return;
+    try {
+      await meta.subscribe();
+      await this._inbox.saveCursor(id, { cursor: 'ok', error: null });
+    } catch (err: any) {
+      // reading still works without it; only Instagram replies need it
+      await this._inbox.saveCursor(id, { cursor: null, error: clip(err?.message || String(err), 500) });
     }
   }
 

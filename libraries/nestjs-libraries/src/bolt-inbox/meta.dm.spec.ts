@@ -61,3 +61,14 @@ describe('unreachable', () => {
     await expect(new MetaDms('instagram', 't').since('me', new Date())).rejects.toThrow("Couldn't reach Instagram (address lookup failed)");
   });
 });
+
+describe('subscribe', () => {
+  it('subscribes the app to the Page’s messages with the Page token', async () => {
+    const calls: any[] = [];
+    (global as any).fetch = jest.fn(async (url: string, init?: any) => (calls.push({ url, init }), { ok: true, json: async () => ({ success: true }) }));
+    const { MetaDms } = await import('./meta.dm');
+    expect(await new MetaDms('instagram', 'pagetok___usertok').subscribe()).toBe(true);
+    expect(calls[0].url).toContain('/me/subscribed_apps?subscribed_fields=messages&access_token=pagetok');
+    expect(calls[0].init.method).toBe('POST');
+  });
+});

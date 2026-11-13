@@ -108,6 +108,16 @@ export class MetaDms {
     return parseConversations(res, self, since);
   }
 
+  /**
+   * Subscribe this app to the Page's message events. Instagram only opens a
+   * reply window for an app subscribed when the message arrived (Messenger
+   * doesn't need it, but it's harmless). Safe to repeat.
+   */
+  async subscribe() {
+    const body = await this.call('me/subscribed_apps?subscribed_fields=messages', { method: 'POST' });
+    return !!body?.success;
+  }
+
   async send(peer: string, text: string) {
     const body = await this.call('me/messages', {
       method: 'POST',
