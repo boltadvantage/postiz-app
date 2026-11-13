@@ -25,6 +25,7 @@ import { WalletUiProvider } from '@gitroom/frontend/components/auth/providers/pl
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import useCookie from 'react-use-cookie';
 import { TwoFactorLogin } from '@gitroom/frontend/components/auth/two.factor.login';
+import { useAttribution } from '@gitroom/frontend/components/auth/attribution.component';
 const WalletProvider = dynamic(
   () => import('@gitroom/frontend/components/auth/providers/wallet.provider'),
   {
@@ -118,6 +119,7 @@ export function RegisterAfter({
   const fireEvents = useFireEvents();
   const track = useTrack();
   const [datafast_visitor_id] = useCookie('datafast_visitor_id');
+  const getAttribution = useAttribution();
   const isAfterProvider = useMemo(() => {
     return !!token && !!provider;
   }, [token, provider]);
@@ -139,6 +141,7 @@ export function RegisterAfter({
       body: JSON.stringify({
         ...data,
         datafast_visitor_id,
+        attribution: getAttribution(),
       }),
     })
       .then(async (response) => {
