@@ -235,7 +235,7 @@ export const ChannelSwitches: FC<{
             {(!mentionPlatforms || mentionPlatforms.includes(c.identifier)) && (
               <label className="flex items-center gap-[6px] cursor-pointer">
                 <input type="checkbox" checked={!off.mentions.includes(c.id)} onChange={(e) => set(c.id, 'mentions', e.target.checked)} />
-                {c.identifier === 'facebook' ? t('check_comments', 'Check comments') : t('check_mentions', 'Check mentions')}
+                {c.identifier === 'facebook' || c.identifier === 'instagram' ? t('check_comments', 'Check comments') : t('check_mentions', 'Check mentions')}
               </label>
             )}
             {dmPlatforms.includes(c.identifier) && (

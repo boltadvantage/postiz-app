@@ -12,17 +12,19 @@ import { isLocked, withLock } from '@gitroom/nestjs-libraries/redis/bolt.lock';
 import { buildLike, buildQuote, buildReply, buildRepost, InboxKind, NostrInbox } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.inbox';
 import { XInbox } from '@gitroom/nestjs-libraries/bolt-inbox/x.inbox';
 import { FacebookInbox } from '@gitroom/nestjs-libraries/bolt-inbox/facebook.inbox';
+import { IncomingInstagram, InstagramInbox } from '@gitroom/nestjs-libraries/bolt-inbox/instagram.inbox';
 import { switchChecker } from '@gitroom/nestjs-libraries/bolt-inbox/switches';
 import { UsageKind } from '@gitroom/nestjs-libraries/bolt-costs/usage';
 import { chargeX, hasLink, worstItem, xBudgetLeft, xBudgetSettings, XPool, XResources } from '@gitroom/nestjs-libraries/bolt-costs/x-billing';
 
 /** Channels with direct messages, and channels with mentions/comments. */
 export const INBOX_PROVIDERS = ['nostr', 'x', 'facebook', 'instagram'];
-export const MENTION_PROVIDERS = ['nostr', 'x', 'facebook'];
+export const MENTION_PROVIDERS = ['nostr', 'x', 'facebook', 'instagram'];
 const LOCK_KEY = 'bolt-inbox:lock';
 const NOSTR_FIRST_RUN_DAYS = 14;
 const X_FIRST_RUN_DAYS = 7;
 const FACEBOOK_FIRST_RUN_DAYS = 14;
+const INSTAGRAM_FIRST_RUN_DAYS = 14;
 // X costs money per item read, so check it less often than Nostr
 const X_MIN_INTERVAL_MIN = 30;
 const PAGE = 50;
@@ -97,6 +99,7 @@ export class InboxService {
           if (integration.providerIdentifier === 'nostr') await this.syncNostr(integration);
           if (integration.providerIdentifier === 'x') await this.syncX(integration, force);
           if (integration.providerIdentifier === 'facebook') await this.syncFacebook(integration);
+          if (integration.providerIdentifier === 'instagram') await this.syncInstagram(integration);
         } catch (err: any) {
           this._logger.warn(`${integration.providerIdentifier} ${integration.id}: ${err?.message || err}`);
         }
@@ -284,6 +287,56 @@ export class InboxService {
     await this.saveCursor(integration.id, { since: page.newest, error: null });
   }
 
+  /** Comments on the account's recent posts, and posts it's tagged in. */
+  private async syncInstagram(integration: Integration) {
+    const ig = new InstagramInbox(integration.internalId, await this.token(integration));
+    const self = { id: integration.internalId, username: integration.profile || undefined };
+    const tagsCursor = `ig-tags:${integration.id}`;
+    const [state, tagState] = await Promise.all([this.cursor(integration.id), this.cursor(tagsCursor)]);
+    const first = dayjs().subtract(INSTAGRAM_FIRST_RUN_DAYS, 'day').toDate();
+    try {
+      const comments = await ig.comments(state?.since || first, self);
+      await this.storeInstagram(integration, comments.items);
+      await this.saveCursor(integration.id, { since: comments.newest, error: null });
+      // tags are a bonus: a problem there doesn't hold up comments
+      try {
+        const tags = await ig.tags(tagState?.since || first);
+        await this.storeInstagram(integration, tags.items);
+        await this.saveCursor(tagsCursor, { since: tags.newest, error: null });
+      } catch (err: any) {
+        await this.saveCursor(tagsCursor, { error: clip(err?.message || String(err), 500) });
+      }
+    } catch (err: any) {
+      await this.saveCursor(integration.id, { error: clip(err?.message || String(err), 500) });
+      throw err;
+    }
+  }
+
+  private async storeInstagram(integration: Integration, items: IncomingInstagram[]) {
+    const muted = await this.mutedAuthors(integration.organizationId, 'instagram');
+    for (const c of items.filter((i) => !muted.has(i.author.id))) {
+      await this.upsertPerson(integration.organizationId, 'instagram', c.author.id, { handle: c.author.handle, name: c.author.handle });
+      await this._prisma.inboxItem.upsert({
+        where: { integrationId_externalId: { integrationId: integration.id, externalId: c.id } },
+        create: {
+          organizationId: integration.organizationId,
+          integrationId: integration.id,
+          platform: 'instagram',
+          externalId: c.id,
+          kind: c.kind,
+          authorId: c.author.id,
+          content: clip(c.text, 5000) || '',
+          url: c.url,
+          inReplyToId: c.targetId,
+          inReplyToText: clip(c.targetText, 280),
+          raw: c.threadId ? JSON.stringify({ thread: c.threadId }) : null,
+          publishedAt: c.createdAt,
+        },
+        update: {},
+      });
+    }
+  }
+
   // ---------- reading ----------
 
   async list(organizationId: string, f: InboxFilters) {
@@ -340,7 +393,7 @@ export class InboxService {
   /** Last fetch problem per Facebook channel (e.g. a permission Meta took away). */
   async problems(organizationId: string): Promise<Record<string, string>> {
     const channels = await this._prisma.integration.findMany({
-      where: { organizationId, deletedAt: null, providerIdentifier: 'facebook' },
+      where: { organizationId, deletedAt: null, providerIdentifier: { in: ['facebook', 'instagram'] } },
       select: { id: true, updatedAt: true },
     });
     if (!channels.length) return {};
@@ -457,6 +510,16 @@ export class InboxService {
       }
       if (action === 'reply') externalId = await fb.reply(thread, clean);
       if (action === 'like') await fb.like(item.externalId);
+    } else if (item.platform === 'instagram') {
+      if (action !== 'reply') throw new Error('Instagram comments can be replied to; liking them isn’t possible through Instagram’s API');
+      if (item.kind !== 'reply') throw new Error('Open the post in Instagram to respond to a tag');
+      let thread = item.externalId;
+      try {
+        thread = JSON.parse(item.raw || '{}').thread || thread;
+      } catch {
+        // keep the comment itself
+      }
+      externalId = await new InstagramInbox(integration.internalId, await this.token(integration)).reply(thread, clean);
     } else {
       throw new Error('This channel does not support that yet');
     }
