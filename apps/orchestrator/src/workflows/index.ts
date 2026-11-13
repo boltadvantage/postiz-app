@@ -21,3 +21,4 @@ export * from './process.media.workflow';
 export * from './clipping.workflow';
 export * from './bolt-analytics.workflow';
 export * from './bolt-inbox.workflow';
+export * from './encrypt.tokens.workflow';

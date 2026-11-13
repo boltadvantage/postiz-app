@@ -80,6 +80,7 @@ export class LoadToolsService {
         - Generate text for posts
         - Show global analytics about socials
         - List integrations (channels)
+        - Give the user a link to connect a new channel (integrationConnectTool)
         - List groups (customers) and filter the channels by a group
         - Read the inbox (mentions, replies, quotes on Nostr and X) and reply, repost, quote or like (boltInboxListTool, boltInboxRespondTool)
         - Read and answer direct messages (boltConversationsListTool, boltConversationReadTool, boltMessageSendTool)
