@@ -205,11 +205,12 @@ export const ChannelSwitches: FC<{
   channels: Channel[];
   off: { mentions: string[]; messages: string[] };
   dmPlatforms: string[];
+  mentionPlatforms?: string[];
   onChanged: () => void;
   follows?: Record<string, FollowSetting>;
   followPlatforms?: string[];
   onFollowsChanged?: () => void;
-}> = ({ channels, off, dmPlatforms, onChanged, follows, followPlatforms = [], onFollowsChanged }) => {
+}> = ({ channels, off, dmPlatforms, mentionPlatforms, onChanged, follows, followPlatforms = [], onFollowsChanged }) => {
   const t = useT();
   const fetch = useFetch();
   const toaster = useToaster();
@@ -230,10 +231,12 @@ export const ChannelSwitches: FC<{
             <span className="text-textColor truncate">
               {c.name} <span className="text-textItemBlur">({c.identifier})</span>
             </span>
-            <label className="flex items-center gap-[6px] cursor-pointer">
-              <input type="checkbox" checked={!off.mentions.includes(c.id)} onChange={(e) => set(c.id, 'mentions', e.target.checked)} />
-              {c.identifier === 'facebook' ? t('check_comments', 'Check comments') : t('check_mentions', 'Check mentions')}
-            </label>
+            {(!mentionPlatforms || mentionPlatforms.includes(c.identifier)) && (
+              <label className="flex items-center gap-[6px] cursor-pointer">
+                <input type="checkbox" checked={!off.mentions.includes(c.id)} onChange={(e) => set(c.id, 'mentions', e.target.checked)} />
+                {c.identifier === 'facebook' ? t('check_comments', 'Check comments') : t('check_mentions', 'Check mentions')}
+              </label>
+            )}
             {dmPlatforms.includes(c.identifier) && (
               <label className="flex items-center gap-[6px] cursor-pointer">
                 <input type="checkbox" checked={!off.messages.includes(c.id)} onChange={(e) => set(c.id, 'messages', e.target.checked)} />

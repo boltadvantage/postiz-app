@@ -40,6 +40,9 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
     'pages_manage_engagement',
     'pages_read_engagement',
     'read_insights',
+    // Bolt Advantage: Page messages in the inbox
+    'pages_messaging',
+    'pages_manage_metadata',
   ];
   override maxConcurrentJob = 500; // Facebook has reasonable rate limits
   editor = 'normal' as const;

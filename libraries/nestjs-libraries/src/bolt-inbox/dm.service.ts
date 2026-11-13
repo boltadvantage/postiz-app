@@ -12,6 +12,7 @@ import { DmProtocol, NostrDms } from '@gitroom/nestjs-libraries/bolt-inbox/nostr
 import { isDmPermissionError, XDms, xIdAfter } from '@gitroom/nestjs-libraries/bolt-inbox/x.inbox';
 import { worstItem, xBudgetSettings } from '@gitroom/nestjs-libraries/bolt-costs/x-billing';
 import { switchChecker } from '@gitroom/nestjs-libraries/bolt-inbox/switches';
+import { META_DM_LIMIT, MetaDmError, MetaDms, MetaPlatform } from '@gitroom/nestjs-libraries/bolt-inbox/meta.dm';
 
 const LOCK_KEY = 'bolt-dm:lock';
 const FIRST_RUN_DAYS = 14;
@@ -65,6 +66,7 @@ export class DmService {
           if (await isOff(integration)) continue;
           if (integration.providerIdentifier === 'nostr') await this.syncNostr(integration);
           if (integration.providerIdentifier === 'x') await this.syncX(integration, force);
+          if (integration.providerIdentifier === 'facebook' || integration.providerIdentifier === 'instagram') await this.syncMeta(integration);
         } catch (err: any) {
           this._logger.warn(`${integration.providerIdentifier} ${integration.id}: ${err?.message || err}`);
         }
@@ -187,6 +189,30 @@ export class DmService {
     } catch (err: any) {
       if (isDmPermissionError(err)) {
         await this._inbox.saveCursor(cursorId, { cursor: state?.cursor || null, error: X_DM_PERMISSION });
+        return;
+      }
+      throw err;
+    }
+  }
+
+  /** Facebook Page and Instagram messages: free, so checked every pass. */
+  private async syncMeta(integration: Integration) {
+    const cursorId = dmCursorId(integration.id);
+    const state = await this._inbox.cursor(cursorId);
+    const since = state?.since || dayjs().subtract(FIRST_RUN_DAYS, 'day').toDate();
+    const meta = new MetaDms(integration.providerIdentifier as MetaPlatform, await this._inbox.token(integration));
+    try {
+      const res = await meta.since(integration.internalId, since);
+      await this.store(
+        integration,
+        res.messages.map((m) => ({ externalId: m.id, peer: m.peer, direction: m.direction, text: m.text, sentAt: m.createdAt, protocol: null })),
+        res.people
+      );
+      // a little overlap: a conversation's time can land just before its newest message is visible
+      await this._inbox.saveCursor(cursorId, { since: new Date(res.newest.getTime() - 120_000), error: null });
+    } catch (err: any) {
+      if (err instanceof MetaDmError) {
+        await this._inbox.saveCursor(cursorId, { since, error: clip(err.message, 500) });
         return;
       }
       throw err;
@@ -352,6 +378,10 @@ export class DmService {
         throw err;
       }
       await this._inbox.charge(integration, 'write', 'x-write', { writes: 1 });
+    } else if (c.platform === 'facebook' || c.platform === 'instagram') {
+      const limit = META_DM_LIMIT[c.platform];
+      if (clean.length > limit) throw new Error(`${c.platform === 'facebook' ? 'Messenger' : 'Instagram'} messages are limited to ${limit.toLocaleString()} characters`);
+      externalId = await new MetaDms(c.platform, await this._inbox.token(integration)).send(c.peerId, clean);
     } else {
       throw new Error('This channel does not support messages yet');
     }

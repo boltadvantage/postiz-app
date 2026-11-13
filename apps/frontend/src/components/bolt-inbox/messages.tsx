@@ -34,6 +34,24 @@ const when = (d: string) => {
 };
 const who = (c: Conversation) => c.person?.name || c.person?.handle || `${c.peerId.slice(0, 10)}…`;
 
+/** Meta lets a Page answer only within 24 hours of the person's last message. */
+const ReplyWindow: FC<{ messages?: Message[] }> = ({ messages }) => {
+  const t = useT();
+  const lastIn = [...(messages || [])].reverse().find((m) => m.direction === 'in');
+  if (!lastIn) return null;
+  const left = dayjs(lastIn.sentAt).add(24, 'hour').diff(dayjs(), 'minute');
+  return (
+    <span title={t('reply_window_explain', 'Facebook and Instagram only let you reply within 24 hours of their last message.')} className={clsx(left <= 0 && 'text-red-400')}>
+      ·{' '}
+      {left <= 0
+        ? t('reply_window_closed', 'reply window closed')
+        : left < 60
+        ? t('reply_window_minutes', '{{n}} min left to reply', { n: left })
+        : t('reply_window_hours', '{{n}} h left to reply', { n: Math.floor(left / 60) })}
+    </span>
+  );
+};
+
 const Thread: FC<{ convo: Conversation; channel?: InboxChannel; allTags: string[]; onChanged: () => void }> = ({ convo, channel, allTags, onChanged }) => {
   const t = useT();
   const fetch = useFetch();
@@ -88,6 +106,7 @@ const Thread: FC<{ convo: Conversation; channel?: InboxChannel; allTags: string[
             {p?.handle && <span className="truncate max-w-[160px]">@{p.handle}</span>}
             <ChannelAvatar picture={channel?.picture} platform={convo.platform} size={18} />
             <span className="truncate max-w-[140px]">{channel?.name}</span>
+            {(convo.platform === 'facebook' || convo.platform === 'instagram') && <ReplyWindow messages={data?.messages} />}
             {convo.platform === 'nostr' && (
               <span title={convo.protocol === 'nip04' ? t('dm_nip04_explain', 'They use the older Nostr encryption (NIP-04), so replies use it too.') : t('dm_nip17_explain', 'Private messages (NIP-17): content and who you talk to are hidden from relays.')}>
                 · {convo.protocol === 'nip04' ? t('dm_nip04', 'older encryption') : t('dm_nip17', 'private')}

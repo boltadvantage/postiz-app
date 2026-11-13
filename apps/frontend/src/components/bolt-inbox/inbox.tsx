@@ -37,8 +37,8 @@ type Item = {
   person: Person | null;
 };
 
-const DM_PLATFORMS = ['nostr', 'x'];
-const MENTION_PLATFORMS = [...DM_PLATFORMS, 'facebook'];
+const DM_PLATFORMS = ['nostr', 'x', 'facebook', 'instagram'];
+const MENTION_PLATFORMS = ['nostr', 'x', 'facebook'];
 const FOLLOW_PLATFORMS = ['x', 'nostr'];
 const KINDS: Array<{ value: Item['kind']; label: string }> = [
   { value: 'mention', label: 'Mentions' },
@@ -333,7 +333,8 @@ export const Inbox = () => {
           {!channelList.length && <div className="text-[12px] text-textItemBlur">{t('inbox_no_channels', 'Connect X, Nostr or a Facebook Page to use the inbox.')}</div>}
           {!!switches && (
             <ChannelSwitches
-              channels={((integrations || []) as Channel[]).filter((c) => MENTION_PLATFORMS.includes(c.identifier))}
+              channels={((integrations || []) as Channel[]).filter((c) => MENTION_PLATFORMS.includes(c.identifier) || DM_PLATFORMS.includes(c.identifier))}
+              mentionPlatforms={MENTION_PLATFORMS}
               off={switches}
               dmPlatforms={DM_PLATFORMS}
               onChanged={() => mutateSwitches()}

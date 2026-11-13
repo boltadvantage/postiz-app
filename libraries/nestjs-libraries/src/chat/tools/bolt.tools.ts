@@ -178,7 +178,7 @@ export class BoltConversationsListTool implements AgentToolInterface {
       id: 'boltConversationsListTool',
       mcp: read('List Direct-Message Conversations'),
       description: `
-List the user's one-to-one direct-message conversations on Nostr and X, most recent first, with the last message, who sent it, unread count and the other person (with private tags and notes).
+List the user's one-to-one direct-message conversations on Nostr, X, Facebook Pages (Messenger) and Instagram, most recent first, with the last message, who sent it, unread count and the other person (with private tags and notes).
 "problems" lists channels whose messages can't be fetched and why (for example X missing Direct Message permission) - tell the user.
 Read a conversation with boltConversationReadTool and answer with boltMessageSendTool.
 `,
@@ -233,7 +233,7 @@ export class BoltMessageSendTool implements AgentToolInterface {
       mcp: write('Send a Direct Message', true),
       description: `
 Send a direct message in an existing conversation (from boltConversationsListTool), from the channel it belongs to. It is delivered right away and can't be unsent.
-On Nostr it uses the same encryption the other person uses. Always show the user the exact text and who it goes to, and get their confirmation first.
+On Nostr it uses the same encryption the other person uses. Facebook (Messenger, up to 2,000 characters) and Instagram (up to 1,000) only allow a reply within 24 hours of the person's last message. Always show the user the exact text and who it goes to, and get their confirmation first.
 `,
       inputSchema: z.object({
         conversationId: z.string(),

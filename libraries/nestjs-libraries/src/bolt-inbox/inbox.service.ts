@@ -16,9 +16,9 @@ import { switchChecker } from '@gitroom/nestjs-libraries/bolt-inbox/switches';
 import { UsageKind } from '@gitroom/nestjs-libraries/bolt-costs/usage';
 import { chargeX, hasLink, worstItem, xBudgetLeft, xBudgetSettings, XPool, XResources } from '@gitroom/nestjs-libraries/bolt-costs/x-billing';
 
-/** Channels with direct messages; the inbox also collects Facebook Page comments. */
-export const INBOX_PROVIDERS = ['nostr', 'x'];
-export const MENTION_PROVIDERS = [...INBOX_PROVIDERS, 'facebook'];
+/** Channels with direct messages, and channels with mentions/comments. */
+export const INBOX_PROVIDERS = ['nostr', 'x', 'facebook', 'instagram'];
+export const MENTION_PROVIDERS = ['nostr', 'x', 'facebook'];
 const LOCK_KEY = 'bolt-inbox:lock';
 const NOSTR_FIRST_RUN_DAYS = 14;
 const X_FIRST_RUN_DAYS = 7;
