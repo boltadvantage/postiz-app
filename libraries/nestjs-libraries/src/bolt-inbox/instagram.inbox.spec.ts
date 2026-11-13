@@ -60,4 +60,12 @@ describe('Instagram inbox', () => {
     expect(calls[1].url).toContain('/c1/replies?');
     expect(JSON.parse(calls[1].init.body)).toEqual({ message: 'Noon' });
   });
+
+  it('comments on a post that @mentions the account through the mentions endpoint', async () => {
+    const calls: any[] = [];
+    (global as any).fetch = jest.fn(async (url: string, init?: any) => (calls.push({ url, init }), { ok: true, json: async () => ({ id: 'c99' }) }));
+    expect(await new InstagramInbox(ME.id, 'pagetok___u').replyToMention('m9', 'Thank you!')).toBe('c99');
+    expect(calls[0].url).toContain(`/${ME.id}/mentions?access_token=pagetok`);
+    expect(JSON.parse(calls[0].init.body)).toEqual({ media_id: 'm9', message: 'Thank you!' });
+  });
 });

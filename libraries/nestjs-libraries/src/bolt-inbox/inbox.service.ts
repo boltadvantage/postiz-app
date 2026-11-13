@@ -512,14 +512,23 @@ export class InboxService {
       if (action === 'like') await fb.like(item.externalId);
     } else if (item.platform === 'instagram') {
       if (action !== 'reply') throw new Error('Instagram comments can be replied to; liking them isn’t possible through Instagram’s API');
-      if (item.kind !== 'reply') throw new Error('Open the post in Instagram to respond to a tag');
-      let thread = item.externalId;
-      try {
-        thread = JSON.parse(item.raw || '{}').thread || thread;
-      } catch {
-        // keep the comment itself
+      const ig = new InstagramInbox(integration.internalId, await this.token(integration));
+      if (item.kind === 'mention') {
+        // a tag: only possible when the caption @mentions the account
+        try {
+          externalId = await ig.replyToMention(item.inReplyToId || item.externalId.replace(/^tag:/, ''), clean);
+        } catch (err: any) {
+          throw new Error(`Instagram only allows replying when the caption @mentions you; open the post to comment instead. (${err?.message || err})`);
+        }
+      } else {
+        let thread = item.externalId;
+        try {
+          thread = JSON.parse(item.raw || '{}').thread || thread;
+        } catch {
+          // keep the comment itself
+        }
+        externalId = await ig.reply(thread, clean);
       }
-      externalId = await new InstagramInbox(integration.internalId, await this.token(integration)).reply(thread, clean);
     } else {
       throw new Error('This channel does not support that yet');
     }

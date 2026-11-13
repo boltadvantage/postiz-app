@@ -122,6 +122,19 @@ export class InstagramInbox {
     return parseTags(res, since);
   }
 
+  /**
+   * Comment on someone else's post that @mentions this account in its caption.
+   * Instagram allows this only for caption @mentions, not for photo tags alone.
+   */
+  async replyToMention(mediaId: string, text: string) {
+    const body = await this.call(`${this.igUserId}/mentions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ media_id: mediaId, message: text }),
+    });
+    return String(body?.id || '') || null;
+  }
+
   async reply(commentId: string, text: string) {
     const body = await this.call(`${commentId}/replies`, {
       method: 'POST',

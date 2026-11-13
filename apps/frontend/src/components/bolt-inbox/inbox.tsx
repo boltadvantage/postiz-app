@@ -166,11 +166,10 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
           )}
           <div className="mt-[6px] text-[14px] whitespace-pre-wrap break-words">{item.platform === 'nostr' ? pretty(item.content) : item.content}</div>
           <div className="mt-[8px] flex flex-wrap items-center gap-[6px] text-[12px]">
-            {!(item.platform === 'instagram' && item.kind === 'mention') && (
-              <button type="button" onClick={() => setOpen(open === 'reply' ? null : 'reply')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder">
-                {t('reply', 'Reply')}{item.repliedAt ? ' ✓' : ''}
-              </button>
-            )}
+            <button type="button" onClick={() => setOpen(open === 'reply' ? null : 'reply')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder">
+              {item.platform === 'instagram' && item.kind === 'mention' ? t('comment_on_post', 'Comment') : t('reply', 'Reply')}
+              {item.repliedAt ? ' ✓' : ''}
+            </button>
             {!COMMENT_PLATFORMS.includes(item.platform) && (
               <button type="button" onClick={() => setOpen(open === 'quote' ? null : 'quote')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder">
                 {t('quote', 'Quote')}{item.quotedAt ? ' ✓' : ''}
