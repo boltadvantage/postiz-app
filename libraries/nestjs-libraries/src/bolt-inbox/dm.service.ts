@@ -337,12 +337,15 @@ export class DmService {
   async problems(organizationId: string) {
     const channels = await this._prisma.integration.findMany({
       where: { organizationId, deletedAt: null, providerIdentifier: { in: INBOX_PROVIDERS } },
-      select: { id: true },
+      select: { id: true, updatedAt: true },
     });
     const rows = await this._prisma.inboxCursor.findMany({
       where: { integrationId: { in: channels.map((c) => dmCursorId(c.id)) }, error: { not: null } },
     });
-    return Object.fromEntries(rows.map((r) => [r.integrationId.slice(3), r.error]));
+    const changed = new Map(channels.map((c) => [dmCursorId(c.id), c.updatedAt]));
+    // a reconnect after the failed check may already have fixed it; the next check will say
+    const current = rows.filter((r) => !r.lastRunAt || r.lastRunAt >= (changed.get(r.integrationId) || new Date(0)));
+    return Object.fromEntries(current.map((r) => [r.integrationId.slice(3), r.error]));
   }
 
   // ---------- sending ----------

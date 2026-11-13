@@ -91,7 +91,8 @@ export class MetaDms {
       if (isWindowError(e)) {
         throw new MetaDmError(`${this.platform === 'facebook' ? 'Facebook' : 'Instagram'} only lets you reply within 24 hours of their last message.`);
       }
-      if (isPermissionError(e)) throw new MetaDmError(PERMISSION_HINT[this.platform], true);
+      // keep Meta's own words: "permission" covers several different fixes
+      if (isPermissionError(e)) throw new MetaDmError(`${PERMISSION_HINT[this.platform]} (Meta said: ${e.message || `code ${e.code}`})`, true);
       throw new MetaDmError(`${this.platform === 'facebook' ? 'Facebook' : 'Instagram'}: ${e.message || `HTTP ${res.status}`}`);
     }
     return body;

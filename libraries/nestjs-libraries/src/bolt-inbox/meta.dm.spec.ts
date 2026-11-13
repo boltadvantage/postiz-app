@@ -45,7 +45,7 @@ describe('Facebook and Instagram messages', () => {
     (global as any).fetch = jest.fn(async () => ({ ok: false, status: 400, json: async () => ({ error: { code: 10, error_subcode: 2018278, message: 'outside of allowed window' } }) }));
     await expect(new MetaDms('facebook', 't').send('u1', 'Hi')).rejects.toThrow('within 24 hours');
     (global as any).fetch = jest.fn(async () => ({ ok: false, status: 403, json: async () => ({ error: { code: 200, message: 'Requires pages_messaging permission' } }) }));
-    await expect(new MetaDms('facebook', 't').since(PAGE, new Date())).rejects.toThrow('pages_messaging');
+    await expect(new MetaDms('facebook', 't').since(PAGE, new Date())).rejects.toThrow('(Meta said: Requires pages_messaging permission)');
   });
 });
 
