@@ -12,7 +12,7 @@ import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
-import { Channel, ChannelSwitches, FollowSetting, Person, PersonPanel, pretty, SelectionBar, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
+import { Channel, ChannelSwitches, FollowSetting, Person, PersonPanel, pretty, ProblemNote, SelectionBar, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
 import { Follows } from '@gitroom/frontend/components/bolt-inbox/follows';
 import { Messages } from '@gitroom/frontend/components/bolt-inbox/messages';
 import { useIntegrationList } from '@gitroom/frontend/components/launches/helpers/use.integration.list';
@@ -416,11 +416,7 @@ export const Inbox = () => {
           </div>
         )}
         {view === 'mentions' &&
-          Object.entries(counts?.problems || {}).map(([id, msg]) => (
-            <div key={id} className="px-[12px] py-[8px] rounded-[8px] border border-amber-500/40 bg-amber-500/10 text-[13px]">
-              <b>{channelById.get(id)?.name || t('channel', 'Channel')}:</b> {msg}
-            </div>
-          ))}
+          Object.entries(counts?.problems || {}).map(([id, msg]) => <ProblemNote key={id} channel={channelById.get(id)} message={msg} />)}
         {view === 'follows' ? (
           <Follows
             status={status}

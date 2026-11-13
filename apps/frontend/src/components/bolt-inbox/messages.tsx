@@ -10,7 +10,7 @@ import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
-import { Channel as InboxChannel, Person as InboxPerson, PersonPanel, pretty, SelectionBar, Status as InboxStatus } from '@gitroom/frontend/components/bolt-inbox/shared';
+import { Channel as InboxChannel, Person as InboxPerson, PersonPanel, pretty, ProblemNote, SelectionBar, Status as InboxStatus } from '@gitroom/frontend/components/bolt-inbox/shared';
 import { ChannelAvatar } from '@gitroom/frontend/components/bolt-shared/channel.avatar';
 
 type Conversation = {
@@ -230,9 +230,7 @@ export const Messages: FC<{
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-[10px]">
       {Object.entries(problems || {}).map(([id, msg]) => (
-        <div key={id} className="rounded-[8px] border border-yellow-600/60 bg-yellow-900/20 px-[12px] py-[8px] text-[13px]">
-          <b>{channelById.get(id)?.name || t('channel', 'Channel')}:</b> {msg}
-        </div>
+        <ProblemNote key={id} channel={channelById.get(id)} message={msg} />
       ))}
       <div className="flex flex-1 min-h-0 rounded-[8px] border border-newTableBorder overflow-hidden mobile:flex-col">
         <div className={clsx('w-[320px] mobile:w-full shrink-0 border-e border-newTableBorder overflow-y-auto', open && 'mobile:hidden')}>

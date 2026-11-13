@@ -48,3 +48,16 @@ describe('Facebook and Instagram messages', () => {
     await expect(new MetaDms('facebook', 't').since(PAGE, new Date())).rejects.toThrow('pages_messaging');
   });
 });
+
+describe('unreachable', () => {
+  it('says which service and why instead of "fetch failed"', async () => {
+    const { unreachable } = await import('./meta.dm');
+    const err = Object.assign(new TypeError('fetch failed'), { cause: { code: 'ETIMEDOUT' } });
+    expect(unreachable('Facebook', err).message).toBe("Couldn't reach Facebook (timed out). It'll try again on the next check.");
+    (global as any).fetch = jest.fn(async () => {
+      throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } });
+    });
+    const { MetaDms } = await import('./meta.dm');
+    await expect(new MetaDms('instagram', 't').since('me', new Date())).rejects.toThrow("Couldn't reach Instagram (address lookup failed)");
+  });
+});
