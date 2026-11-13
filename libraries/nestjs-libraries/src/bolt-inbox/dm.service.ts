@@ -16,6 +16,8 @@ import { META_DM_LIMIT, MetaDmError, MetaDms, MetaPlatform } from '@gitroom/nest
 
 const LOCK_KEY = 'bolt-dm:lock';
 const FIRST_RUN_DAYS = 14;
+// Facebook and Instagram only allow replies within 24 hours, so older messages aren't worth bringing in
+const META_FIRST_RUN_HOURS = 24;
 const X_MIN_INTERVAL_MIN = 30;
 const X_MAX_READS_PER_RUN = 20;
 // left untouched by DM checks so mentions can always run
@@ -199,7 +201,7 @@ export class DmService {
   private async syncMeta(integration: Integration) {
     const cursorId = dmCursorId(integration.id);
     const state = await this._inbox.cursor(cursorId);
-    const since = state?.since || dayjs().subtract(FIRST_RUN_DAYS, 'day').toDate();
+    const since = state?.since || dayjs().subtract(META_FIRST_RUN_HOURS, 'hour').toDate();
     const meta = new MetaDms(integration.providerIdentifier as MetaPlatform, await this._inbox.token(integration));
     try {
       const res = await meta.since(integration.internalId, since);
