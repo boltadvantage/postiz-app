@@ -46,6 +46,11 @@ export class NotificationService {
     digest = false,
     type: NotificationType = 'success'
   ) {
+    // Bolt Advantage: no "published" notices (in-app or email); failures and the rest stay.
+    // BOLT_NOTIFY_PUBLISHED=true brings them back.
+    if (type === 'success' && /^Your post has been published/i.test(subject) && process.env.BOLT_NOTIFY_PUBLISHED !== 'true') {
+      return;
+    }
     await this._notificationRepository.createNotification(orgId, message);
     if (!sendEmail) {
       return;

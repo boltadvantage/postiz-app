@@ -9,6 +9,7 @@ import EmailNotificationsComponent from '@gitroom/frontend/components/settings/e
 import ShortlinkPreferenceComponent from '@gitroom/frontend/components/settings/shortlink-preference.component';
 import DeleteAccountComponent from '@gitroom/frontend/components/settings/delete-account.component';
 import XBudgetComponent from '@gitroom/frontend/components/settings/x-budget.component';
+import DesktopNotificationsComponent from '@gitroom/frontend/components/settings/desktop.notifications.component';
 
 const MetricComponent = dynamic(
   () => import('@gitroom/frontend/components/settings/metric.component'),
@@ -25,6 +26,7 @@ export const GlobalSettings = () => {
       <AuthenticationComponent />
       <TwoFactorComponent />
       <XBudgetComponent />
+      <DesktopNotificationsComponent />
       <MetricComponent />
       <EmailNotificationsComponent />
       <ShortlinkPreferenceComponent />
