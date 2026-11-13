@@ -44,23 +44,33 @@ describe('Facebook inbox', () => {
     expect(newest).toEqual(since);
   });
 
-  it('asks for the feed once and posts replies and likes with the Page token', async () => {
+  it('lists posts, reads comments only on posts with new activity, and replies and likes with the Page token', async () => {
     const calls: Array<{ url: string; init?: any }> = [];
+    const list = {
+      data: [
+        { id: 'page1_post1', message: 'Our town hall is Friday', permalink_url: 'https://www.facebook.com/page1/posts/1', updated_time: '2026-11-03T12:00:00+0000' },
+        { id: 'page1_quiet', message: 'Old', updated_time: '2026-10-20T12:00:00+0000' },
+      ],
+    };
     (global as any).fetch = jest.fn(async (url: string, init?: any) => {
       calls.push({ url, init });
-      return { ok: true, status: 200, json: async () => (url.includes('/feed') ? feed : { id: 'new1', success: true }) };
+      const body = url.includes('/feed?') ? list : url.includes('/page1_post1/comments?filter') ? feed.data[0].comments : { id: 'new1', success: true };
+      return { ok: true, status: 200, json: async () => body };
     });
     const fb = new FacebookInbox(PAGE, 'tok en');
-    await fb.comments(new Date('2026-11-02T00:00:00Z'));
+    const { items } = await fb.comments(new Date('2026-11-02T00:00:00Z'));
+    expect(items.map((i) => i.id)).toEqual(['post1_c1', 'post1_c3']);
     expect(calls[0].url).toContain(`/${PAGE}/feed?fields=`);
-    expect(decodeURIComponent(calls[0].url)).toContain('comments.filter(stream)');
     expect(calls[0].url).toContain('access_token=tok%20en');
+    // the quiet post isn't asked about
+    expect(calls).toHaveLength(2);
+    expect(calls[1].url).toContain('/page1_post1/comments?filter=stream');
     expect(await fb.reply('post1_c1', 'Noon')).toBe('new1');
-    expect(calls[1].url).toContain('/post1_c1/comments?access_token=');
-    expect(JSON.parse(calls[1].init.body)).toEqual({ message: 'Noon' });
+    expect(calls[2].url).toContain('/post1_c1/comments?access_token=');
+    expect(JSON.parse(calls[2].init.body)).toEqual({ message: 'Noon' });
     await fb.like('post1_c1');
-    expect(calls[2]).toMatchObject({ init: { method: 'POST' } });
-    expect(calls[2].url).toContain('/post1_c1/likes?');
+    expect(calls[3]).toMatchObject({ init: { method: 'POST' } });
+    expect(calls[3].url).toContain('/post1_c1/likes?');
   });
 
   it('explains permission errors', async () => {

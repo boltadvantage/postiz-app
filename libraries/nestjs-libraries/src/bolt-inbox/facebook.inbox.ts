@@ -80,19 +80,26 @@ export class FacebookInbox {
     return body;
   }
 
-  /** New comments on the Page's posts from the last FB_POST_DAYS days, in one request. */
+  /**
+   * New comments on the Page's posts from the last FB_POST_DAYS days. A busy
+   * Page's posts-with-comments in one request can take Facebook longer than
+   * the timeout, so: list recent posts (small), then read comments only for
+   * posts with activity since the last check, one post at a time.
+   */
   async comments(since: Date) {
-    const commentFields = 'id,message,created_time,permalink_url,attachment{type},from{id,name},parent{id,message}';
-    const fields = [
-      'id',
-      'message',
-      'permalink_url',
-      `comments.filter(stream).order(reverse_chronological).limit(${COMMENTS_PER_POST}){${commentFields}}`,
-    ].join(',');
-    // posts with fresh comments can be older than the comments, so look back a full window
     const postsSince = Math.floor((Date.now() - FB_POST_DAYS * 86400_000) / 1000);
-    const res = await this.call(`${this.pageId}/feed?fields=${encodeURIComponent(fields)}&limit=${POSTS}&since=${postsSince}`);
-    return parseFeed(res, this.pageId, since);
+    const list = await this.call(`${this.pageId}/feed?fields=${encodeURIComponent('id,message,permalink_url,updated_time')}&limit=${POSTS}&since=${postsSince}`);
+    // a post's updated_time moves when someone comments on it
+    const active = (list?.data || []).filter((p: any) => !p.updated_time || Date.parse(p.updated_time) > since.getTime() - 60_000);
+    const commentFields = 'id,message,created_time,permalink_url,attachment{type},from{id,name},parent{id,message}';
+    const after = Math.floor(since.getTime() / 1000) - 60;
+    for (const post of active) {
+      const res = await this.call(
+        `${post.id}/comments?filter=stream&order=reverse_chronological&limit=${COMMENTS_PER_POST}&since=${after}&fields=${encodeURIComponent(commentFields)}`
+      );
+      post.comments = { data: res?.data || [] };
+    }
+    return parseFeed({ data: active }, this.pageId, since);
   }
 
   async reply(commentId: string, text: string) {
