@@ -52,7 +52,7 @@ export const SelectCustomer: FC<{
   const selectCustomer = useCallback(
     (id: string) => () => {
       toaster.show(
-        t('customer_socials_selected', 'Customer socials selected'),
+        t('customer_socials_selected', 'Client channels selected'),
         'success'
       );
       setCustomer(id);

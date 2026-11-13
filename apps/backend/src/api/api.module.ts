@@ -6,6 +6,7 @@ import { TwoFactorController } from '@gitroom/backend/api/routes/two-factor.cont
 import { ChannelVisibilityController } from '@gitroom/backend/api/routes/channel-visibility.controller';
 import { BoltAnalyticsController } from '@gitroom/backend/api/routes/bolt-analytics.controller';
 import { BoltCostsController } from '@gitroom/backend/api/routes/bolt-costs.controller';
+import { BoltChannelsController } from '@gitroom/backend/api/routes/bolt-channels.controller';
 import { QueueController } from '@gitroom/backend/api/routes/queue.controller';
 import { InboxController } from '@gitroom/backend/api/routes/inbox.controller';
 import { AuthMiddleware } from '@gitroom/backend/services/auth/auth.middleware';
@@ -69,6 +70,7 @@ const authenticatedController = [
   ChannelVisibilityController,
   BoltAnalyticsController,
   BoltCostsController,
+  BoltChannelsController,
   QueueController,
   InboxController,
   AnalyticsController,
