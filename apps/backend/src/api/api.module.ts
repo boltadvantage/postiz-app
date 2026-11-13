@@ -7,6 +7,7 @@ import { ChannelVisibilityController } from '@gitroom/backend/api/routes/channel
 import { BoltAnalyticsController } from '@gitroom/backend/api/routes/bolt-analytics.controller';
 import { BoltCostsController } from '@gitroom/backend/api/routes/bolt-costs.controller';
 import { BoltChannelsController } from '@gitroom/backend/api/routes/bolt-channels.controller';
+import { BoltNotifyController } from '@gitroom/backend/api/routes/bolt-notify.controller';
 import { QueueController } from '@gitroom/backend/api/routes/queue.controller';
 import { InboxController } from '@gitroom/backend/api/routes/inbox.controller';
 import { AuthMiddleware } from '@gitroom/backend/services/auth/auth.middleware';
@@ -71,6 +72,7 @@ const authenticatedController = [
   BoltAnalyticsController,
   BoltCostsController,
   BoltChannelsController,
+  BoltNotifyController,
   QueueController,
   InboxController,
   AnalyticsController,

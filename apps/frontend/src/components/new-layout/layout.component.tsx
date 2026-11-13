@@ -45,6 +45,7 @@ import { FirstBillingComponent } from '@gitroom/frontend/components/billing/firs
 import { TrialTracker } from '@gitroom/frontend/components/layout/gtm.component';
 import { setSentryUser } from '@gitroom/react/sentry/initialize.sentry.client';
 import { setUserTimezone } from '@gitroom/frontend/components/layout/set.timezone';
+import { DesktopNotifier } from '@gitroom/frontend/components/bolt-notify/desktop.notifier';
 
 export const LayoutComponent = ({ children }: { children: ReactNode }) => {
   const fetch = useFetch();
@@ -90,6 +91,7 @@ export const LayoutComponent = ({ children }: { children: ReactNode }) => {
         <MantineWrapper>
           <ToolTip />
           <Toaster />
+          <DesktopNotifier />
           <TrialTracker />
           <CheckPayment check={searchParams.get('check') || ''} mutate={mutate}>
             <ShowMediaBoxModal />
