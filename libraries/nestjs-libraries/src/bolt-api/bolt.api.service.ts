@@ -5,6 +5,7 @@ import { Injectable } from '@nestjs/common';
 import { INBOX_ACTIONS, InboxService } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
 import { DmService } from '@gitroom/nestjs-libraries/bolt-inbox/dm.service';
 import { FollowsService } from '@gitroom/nestjs-libraries/bolt-inbox/follows.service';
+import { CompetitorsService } from '@gitroom/nestjs-libraries/bolt-competitors/competitors.service';
 import { QueueService } from '@gitroom/nestjs-libraries/bolt-queue/queue.service';
 import { PauseService } from '@gitroom/nestjs-libraries/bolt-queue/pause.service';
 import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
@@ -45,7 +46,8 @@ export class BoltApiService {
     private _posts: PostsService,
     private _analytics: BoltAnalyticsQueries,
     private _costs: CostsService,
-    private _follows: FollowsService
+    private _follows: FollowsService,
+    private _competitors: CompetitorsService
   ) {}
 
   // ---------- client costs ----------
@@ -101,6 +103,35 @@ export class BoltApiService {
   markInbox(orgId: string, ids: string[], action: string) {
     if (!['read', 'unread', 'archive', 'unarchive'].includes(action)) throw new Error('action must be read, unread, archive or unarchive');
     return this._inbox.mark(orgId, ids.map(String), action as any);
+  }
+
+  // ---------- competitors ----------
+
+  /** Competitors (optionally one client's) with growth and top posts, and our channels' growth to compare. */
+  async competitors(orgId: string, f: { clientId?: string; days?: number }) {
+    const opts = { customerId: f.clientId || undefined, days: Number(f.days) || 30 };
+    const [list, ours] = await Promise.all([this._competitors.list(orgId, opts), this._competitors.ourGrowth(orgId, opts)]);
+    return {
+      untrusted: UNTRUSTED_NOTE,
+      days: opts.days,
+      ours: ours.map((o) => ({ channelId: o.id, name: o.name, platform: o.providerIdentifier, ...o.growth })),
+      competitors: list.map((c) => ({
+        id: c.id,
+        platform: c.platform,
+        handle: c.handle,
+        name: c.name,
+        clientId: c.customerId,
+        followers: c.followers,
+        growth: c.growth,
+        lastCheckAt: iso(c.lastCheckAt),
+        problem: c.lastError,
+        topPosts: c.topPosts.map((p) => ({ text: p.text, url: p.url, publishedAt: iso(p.publishedAt), likes: p.likes, reposts: p.reposts, replies: p.replies })),
+      })),
+    };
+  }
+
+  addCompetitor(orgId: string, input: { platform?: string; handle?: string; clientId?: string | null }) {
+    return this._competitors.add(orgId, { platform: input.platform, handle: input.handle, customerId: input.clientId || null });
   }
 
   // ---------- follows ----------

@@ -11,6 +11,7 @@ import { PauseService } from '@gitroom/nestjs-libraries/bolt-queue/pause.service
 import { InboxService } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
 import { DmService } from '@gitroom/nestjs-libraries/bolt-inbox/dm.service';
 import { FollowsService } from '@gitroom/nestjs-libraries/bolt-inbox/follows.service';
+import { CompetitorsService } from '@gitroom/nestjs-libraries/bolt-competitors/competitors.service';
 import { BoltApiService } from '@gitroom/nestjs-libraries/bolt-api/bolt.api.service';
 import { CostsService } from '@gitroom/nestjs-libraries/bolt-costs/costs.service';
 import { TwoFactorRepository } from '@gitroom/nestjs-libraries/database/prisma/two-factor/two-factor.repository';
@@ -84,6 +85,7 @@ import { AdminStatsService } from '@gitroom/nestjs-libraries/database/prisma/adm
     InboxService,
     DmService,
     FollowsService,
+    CompetitorsService,
     BoltApiService,
     CostsService,
     TwoFactorService,
