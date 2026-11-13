@@ -18,7 +18,17 @@ export type Person = {
   muted: boolean;
   note: string | null;
 };
-export type Channel = { id: string; name: string; picture: string | null; identifier: string; additionalSettings?: string; display?: string | null };
+export type Channel = {
+  id: string;
+  name: string;
+  picture: string | null;
+  identifier: string;
+  additionalSettings?: string;
+  display?: string | null;
+  customer?: { id: string; name: string } | null;
+  type?: string;
+  disabled?: boolean;
+};
 export type Status = 'open' | 'unread' | 'archived' | 'all';
 
 // Nostr clients render nostr: links as embeds; show a short label instead of the raw code

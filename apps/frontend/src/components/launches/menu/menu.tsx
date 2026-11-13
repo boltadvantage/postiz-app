@@ -81,6 +81,10 @@ export const Menu: FC<{
   id: string;
   mutate: () => void;
   onChange: (shouldReload: boolean) => void;
+  // Bolt Advantage: reorder within the client
+  onMove?: (dir: 'up' | 'down') => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 }> = (props) => {
   const {
     canEnable,
@@ -91,6 +95,9 @@ export const Menu: FC<{
     canChangeProfilePicture,
     canChangeNickName,
     refreshChannel,
+    onMove,
+    canMoveUp,
+    canMoveDown,
   } = props;
   const t = useT();
 
@@ -660,6 +667,24 @@ export const Menu: FC<{
               {t('move_add_to_group', 'Move / add to group')}
             </div>
           </div>
+          {onMove &&
+            (['up', 'down'] as const)
+              .filter((dir) => (dir === 'up' ? canMoveUp : canMoveDown))
+              .map((dir) => (
+                <div
+                  key={dir}
+                  className="flex gap-[12px] items-center py-[8px] px-[10px]"
+                  onClick={() => {
+                    setShow(false);
+                    onMove(dir);
+                  }}
+                >
+                  <div className="w-[18px] text-center text-[16px] leading-none">{dir === 'up' ? '↑' : '↓'}</div>
+                  <div className="text-[14px]">
+                    {dir === 'up' ? t('bolt_move_up', 'Move up') : t('bolt_move_down', 'Move down')}
+                  </div>
+                </div>
+              ))}
           <div
             className="flex gap-[12px] items-center py-[8px] px-[10px]"
             onClick={editTimeTable}

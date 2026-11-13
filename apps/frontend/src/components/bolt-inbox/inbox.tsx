@@ -14,6 +14,7 @@ import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
 import { Channel, ChannelSwitches, FollowSetting, Person, PersonPanel, pretty, ProblemNote, SelectionBar, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
 import { Follows } from '@gitroom/frontend/components/bolt-inbox/follows';
+import { sortByChannelOrder, useChannelOrder } from '@gitroom/frontend/components/bolt-shared/channel.order';
 import { Messages } from '@gitroom/frontend/components/bolt-inbox/messages';
 import { useIntegrationList } from '@gitroom/frontend/components/launches/helpers/use.integration.list';
 import { ChannelAvatar } from '@gitroom/frontend/components/bolt-shared/channel.avatar';
@@ -221,6 +222,27 @@ export const Inbox = () => {
   const [view, setView] = useState<'mentions' | 'messages' | 'follows'>('mentions');
   const [status, setStatus] = useState<Status>('open');
   const [channels, setChannels] = useState<string[]>([]);
+  // Bolt Advantage: narrow everything to one client's channels
+  const [client, setClient] = useState('');
+  // the app's shared channel list (other screens cache this key as a plain array)
+  const { data: integrations } = useIntegrationList();
+  const { order: channelOrder } = useChannelOrder();
+  const allInboxChannels = useMemo(
+    () =>
+      sortByChannelOrder(
+        ((integrations || []) as Channel[]).filter((c) => MENTION_PLATFORMS.includes(c.identifier) || DM_PLATFORMS.includes(c.identifier)),
+        channelOrder
+      ),
+    [integrations, channelOrder]
+  );
+  const clients = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const c of allInboxChannels) if (c.customer?.id) seen.set(c.customer.id, c.customer.name);
+    return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allInboxChannels]);
+  const clientIds = useMemo(() => (client ? allInboxChannels.filter((c) => (c.customer?.id || '') === client).map((c) => c.id) : null), [allInboxChannels, client]);
+  // channels picked in the sidebar, kept inside the chosen client
+  const activeChannels = clientIds ? (channels.length ? channels.filter((id) => clientIds.includes(id)) : clientIds.length ? clientIds : ['__none__']) : channels;
   const [kinds, setKinds] = useState<string[]>([]);
   const [tag, setTag] = useState('');
   const [showMuted, setShowMuted] = useState(false);
@@ -234,7 +256,7 @@ export const Inbox = () => {
   const query = new URLSearchParams({
     status,
     page: String(page),
-    ...(channels.length ? { channels: channels.join(',') } : {}),
+    ...(activeChannels.length ? { channels: activeChannels.join(',') } : {}),
     ...(kinds.length ? { kinds: kinds.join(',') } : {}),
     ...(tag ? { tag } : {}),
     ...(showMuted ? { showMuted: 'true' } : {}),
@@ -247,15 +269,14 @@ export const Inbox = () => {
   const { data: switches, mutate: mutateSwitches } = useSWR<{ mentions: string[]; messages: string[] }>('/inbox/switches', get);
   const { data: followSettings, mutate: mutateFollowSettings } = useSWR<Record<string, FollowSetting>>('/inbox/follows/settings', get);
   useEffect(() => setSelected([]), [query, view]);
-  // the app's shared channel list (other screens cache this key as a plain array)
-  const { data: integrations } = useIntegrationList();
-  // Facebook Pages have comments here but no messages (yet)
   const channelList = useMemo(
     () =>
-      ((integrations || []) as Channel[]).filter((c) =>
-        (view === 'messages' ? DM_PLATFORMS : view === 'follows' ? FOLLOW_PLATFORMS : MENTION_PLATFORMS).includes(c.identifier)
+      allInboxChannels.filter(
+        (c) =>
+          (view === 'messages' ? DM_PLATFORMS : view === 'follows' ? FOLLOW_PLATFORMS : MENTION_PLATFORMS).includes(c.identifier) &&
+          (!clientIds || clientIds.includes(c.id))
       ),
-    [integrations, view]
+    [allInboxChannels, view, clientIds]
   );
   const channelById = useMemo(() => new Map(channelList.map((c) => [c.id, c])), [channelList]);
   const refresh = useCallback(() => {
@@ -328,6 +349,21 @@ export const Inbox = () => {
             </button>
           ))}
         </div>
+        {!!clients.length && (
+          <div className={side}>
+            <div className="text-[11px] uppercase text-textItemBlur tracking-wide">{t('clients', 'Clients')}</div>
+            {[{ id: '', name: t('all_clients', 'All clients') }, ...clients].map((c) => (
+              <button
+                key={c.id || 'all'}
+                type="button"
+                onClick={() => (setClient(c.id), setChannels([]), setPage(0))}
+                className={pill(client === c.id)}
+              >
+                <span className="truncate">{c.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <div className={side}>
           <div className="text-[11px] uppercase text-textItemBlur tracking-wide">{t('channels', 'Channels')}</div>
           {channelList.map((c) => (
@@ -430,7 +466,7 @@ export const Inbox = () => {
         {view === 'follows' ? (
           <Follows
             status={status}
-            channels={channels}
+            channels={activeChannels}
             tag={tag}
             showMuted={showMuted}
             search={search}
@@ -441,7 +477,7 @@ export const Inbox = () => {
         ) : view === 'messages' ? (
           <Messages
             status={status}
-            channels={channels}
+            channels={activeChannels}
             tag={tag}
             showMuted={showMuted}
             search={search}
@@ -453,7 +489,7 @@ export const Inbox = () => {
           <LoadingComponent />
         ) : !data?.items.length ? (
           <div className="text-[14px] text-textItemBlur py-[24px] text-center">
-            {search || tag || kinds.length || channels.length ? t('inbox_nothing_matches', 'Nothing matches these filters.') : t('inbox_empty', 'Nothing here yet. New mentions show up within about 10 minutes.')}
+            {search || tag || kinds.length || activeChannels.length ? t('inbox_nothing_matches', 'Nothing matches these filters.') : t('inbox_empty', 'Nothing here yet. New mentions show up within about 10 minutes.')}
           </div>
         ) : (
           <>

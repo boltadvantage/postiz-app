@@ -39,6 +39,7 @@ import { HubspotInstalled } from '@gitroom/frontend/components/launches/hubspot.
 import { useModals } from '@gitroom/frontend/components/layout/new-modal';
 import { Input } from '@gitroom/react/form/input';
 import { Button } from '@gitroom/react/form/button';
+import { moveWithin, sortByChannelOrder, useChannelOrder } from '@gitroom/frontend/components/bolt-shared/channel.order';
 
 export const SVGLine = () => {
   return (
@@ -96,6 +97,8 @@ interface MenuComponentInterface {
   totalNonDisabledChannels: number;
   mutate: (shouldReload?: boolean) => void;
   update: (shouldReload: boolean) => void;
+  // Bolt Advantage: reorder a channel within its client
+  onMove?: (id: string, dir: 'up' | 'down') => void;
 }
 export const OpenClose: FC<{
   isOpen: boolean;
@@ -209,6 +212,7 @@ export const MenuGroupComponent: FC<
     refreshChannel,
     changeItemGroup,
     collapsed,
+    onMove,
   } = props;
   const t = useT();
   const modals = useModals();
@@ -311,10 +315,13 @@ export const MenuGroupComponent: FC<
           !isOpen && 'hidden'
         )}
       >
-        {group.values.map((integration) => (
+        {group.values.map((integration, index) => (
           <MenuComponent
             collapsed={collapsed}
             key={integration.id}
+            onMove={onMove}
+            canMoveUp={index > 0}
+            canMoveDown={index < group.values.length - 1}
             integration={integration}
             mutate={mutate}
             continueIntegration={continueIntegration}
@@ -329,6 +336,8 @@ export const MenuGroupComponent: FC<
 };
 export const MenuComponent: FC<
   MenuComponentInterface & {
+    canMoveUp?: boolean;
+    canMoveDown?: boolean;
     integration: Integration & {
       identifier: string;
       changeProfilePicture: boolean;
@@ -345,6 +354,9 @@ export const MenuComponent: FC<
     update,
     integration,
     collapsed,
+    onMove,
+    canMoveUp,
+    canMoveDown,
   } = props;
   const user = useUser();
   const t = useT();
@@ -462,6 +474,9 @@ export const MenuComponent: FC<
         mutate={mutate}
         onChange={update}
         id={integration.id}
+        onMove={onMove ? (dir) => onMove(integration.id, dir) : undefined}
+        canMoveUp={!!canMoveUp}
+        canMoveDown={!!canMoveDown}
         canEnable={
           user?.totalChannels! > totalNonDisabledChannels &&
           integration.disabled
@@ -542,6 +557,7 @@ export const LaunchesComponent = () => {
       ['desc', 'asc', 'asc']
     );
   }, [integrations]);
+  const { order: channelOrder, save: saveChannelOrder } = useChannelOrder();
   const menuIntegrations = useMemo(() => {
     return orderBy(
       Object.values(
@@ -550,16 +566,18 @@ export const LaunchesComponent = () => {
         name: (p[0].customer?.name || '') as string,
         id: (p[0].customer?.id || '') as string,
         isEmpty: p.length === 0,
-        values: orderBy(
-          p,
-          ['type', 'disabled', 'identifier'],
-          ['desc', 'asc', 'asc']
-        ),
+        // Bolt Advantage: the user's order within the client first
+        values: sortByChannelOrder(p, channelOrder),
       })),
       ['isEmpty', 'name'],
       ['desc', 'asc']
     );
-  }, [sortedIntegrations]);
+  }, [sortedIntegrations, channelOrder]);
+  const moveChannel = useCallback(
+    (id: string, dir: 'up' | 'down') =>
+      saveChannelOrder(moveWithin(menuIntegrations.map((g) => g.values), id, dir)),
+    [menuIntegrations]
+  );
   const update = useCallback(async (shouldReload: boolean) => {
     if (shouldReload) {
       setReload(true);
@@ -774,6 +792,7 @@ export const LaunchesComponent = () => {
                 <MenuGroupComponent
                   collapsed={collapseMenu === '1' && !channelsOpen}
                   changeItemGroup={changeItemGroup}
+                  onMove={moveChannel}
                   key={menu.name}
                   group={menu}
                   mutate={mutate}
