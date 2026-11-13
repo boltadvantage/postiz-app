@@ -22,6 +22,7 @@ import { META_GRAPH_API_VERSION } from '@gitroom/nestjs-libraries/integrations/s
 import { Tool } from '@gitroom/nestjs-libraries/integrations/tool.decorator';
 import { DashboardFunction } from '@gitroom/nestjs-libraries/integrations/dashboard.function.decorator';
 import { hasExtension } from '@gitroom/helpers/utils/has.extension';
+import { fitForInstagram } from '@gitroom/nestjs-libraries/bolt-media/instagram.fit';
 
 @Rules(
   "Instagram should have at least one attachment, if it's a story, it can have only one picture"
@@ -785,6 +786,12 @@ export class InstagramProvider
           )}`
         : ``;
     const isTrialReel = this.assetBoolean(firstPost.settings.is_trial_reel);
+    // Bolt Advantage: pad feed images outside 4:5–1.91:1 instead of failing (stories are 9:16 by design)
+    if (!isStory && firstPost?.media?.length) {
+      firstPost.media = await Promise.all(
+        firstPost.media.map(async (m) => (hasExtension(m.path, 'mp4') ? m : { ...m, path: await fitForInstagram(m.path) }))
+      );
+    }
     const medias = await Promise.all(
       firstPost?.media?.map(async (m) => {
         const caption =

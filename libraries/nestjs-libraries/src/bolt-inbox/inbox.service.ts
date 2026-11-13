@@ -341,11 +341,14 @@ export class InboxService {
   async problems(organizationId: string): Promise<Record<string, string>> {
     const channels = await this._prisma.integration.findMany({
       where: { organizationId, deletedAt: null, providerIdentifier: 'facebook' },
-      select: { id: true },
+      select: { id: true, updatedAt: true },
     });
     if (!channels.length) return {};
     const rows = await this._prisma.inboxCursor.findMany({ where: { integrationId: { in: channels.map((c) => c.id) }, error: { not: null } } });
-    return Object.fromEntries(rows.map((r) => [r.integrationId, r.error as string]));
+    const changed = new Map(channels.map((c) => [c.id, c.updatedAt]));
+    // a reconnect after the failed check may already have fixed it; the next check will say
+    const current = rows.filter((r) => !r.lastRunAt || r.lastRunAt >= (changed.get(r.integrationId) || new Date(0)));
+    return Object.fromEntries(current.map((r) => [r.integrationId, r.error as string]));
   }
 
   async tags(organizationId: string) {
