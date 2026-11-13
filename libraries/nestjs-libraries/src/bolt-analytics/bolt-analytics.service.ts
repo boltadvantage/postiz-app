@@ -21,7 +21,8 @@ import {
   nostrFollowers,
 } from '@gitroom/nestjs-libraries/bolt-analytics/followers';
 
-export const SUPPORTED_PROVIDERS = ['x', 'nostr', 'linkedin', 'linkedin-page', 'facebook', 'instagram', 'instagram-standalone'];
+import { SUPPORTED_PROVIDERS } from '@gitroom/nestjs-libraries/bolt-analytics/providers';
+export { SUPPORTED_PROVIDERS };
 // Channels whose past posts we import from the platform (others: posts made in Postiz only).
 const BACKFILL_PROVIDERS = ['x', 'nostr'];
 const LOCK_KEY = 'bolt-analytics:lock';

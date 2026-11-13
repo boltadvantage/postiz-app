@@ -6,6 +6,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import dayjs from 'dayjs';
 import { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
 import { dayKey } from '@gitroom/nestjs-libraries/bolt-analytics/schedule';
+import { SUPPORTED_PROVIDERS } from '@gitroom/nestjs-libraries/bolt-analytics/providers';
 import { chargeX, xBudgetLeft, xBudgetSettings } from '@gitroom/nestjs-libraries/bolt-costs/x-billing';
 import {
   cleanHandle,
@@ -196,15 +197,21 @@ export class CompetitorsService {
     const days = Math.min(365, Math.max(7, opts.days || 30));
     const since = dayjs().subtract(days, 'day').format('YYYY-MM-DD');
     const channels = await this._prisma.integration.findMany({
-      where: { organizationId, deletedAt: null, ...(opts.customerId ? { customerId: opts.customerId } : {}) },
+      where: {
+        organizationId,
+        deletedAt: null,
+        disabled: false,
+        type: 'social',
+        providerIdentifier: { in: SUPPORTED_PROVIDERS },
+        ...(opts.customerId ? { customerId: opts.customerId } : {}),
+      },
       select: { id: true, name: true, picture: true, providerIdentifier: true },
     });
     const daily = await this._prisma.analyticsChannelDaily.findMany({
       where: { integrationId: { in: channels.map((c) => c.id) }, date: { gte: since } },
       select: { integrationId: true, date: true, followers: true },
     });
-    return channels
-      .map((c) => ({ ...c, growth: growth(daily.filter((d) => d.integrationId === c.id)) }))
-      .filter((c) => c.growth.end !== null);
+    // every channel shows, even before History has saved a count for it
+    return channels.map((c) => ({ ...c, growth: growth(daily.filter((d) => d.integrationId === c.id)) }));
   }
 }

@@ -32,6 +32,18 @@ type Competitor = {
 };
 type Ours = { id: string; name: string; picture: string | null; providerIdentifier: string; growth: Growth };
 
+const PLATFORM_NAMES: Record<string, string> = {
+  x: 'X',
+  facebook: 'Facebook',
+  instagram: 'Instagram',
+  'instagram-standalone': 'Instagram',
+  nostr: 'Nostr',
+  linkedin: 'LinkedIn',
+  'linkedin-page': 'LinkedIn',
+};
+// LinkedIn and LinkedIn Page, Instagram and Instagram Standalone filter together
+const family = (identifier: string) => PLATFORM_NAMES[identifier] || identifier;
+
 const PLATFORMS = [
   { value: 'x', label: 'X' },
   { value: 'instagram', label: 'Instagram' },
@@ -148,6 +160,7 @@ export const Competitors = () => {
   const [handle, setHandle] = useState('');
   const [forClient, setForClient] = useState('');
   const [adding, setAdding] = useState(false);
+  const [only, setOnly] = useState('');
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'percent', dir: 'desc' });
   const sortBy = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'name' ? 'asc' : 'desc' }));
@@ -180,7 +193,7 @@ export const Competitors = () => {
     const rows = [
       ...(data?.ours || []).map((o) => ({ key: `o-${o.id}`, ours: true, name: o.name, picture: o.picture, platform: o.providerIdentifier, growth: o.growth })),
       ...(data?.competitors || []).map((c) => ({ key: `c-${c.id}`, ours: false, name: c.name || c.handle, picture: c.picture, platform: c.platform, growth: c.growth })),
-    ];
+    ].filter((r) => !only || family(r.platform) === only);
     const dir = sort.dir === 'asc' ? 1 : -1;
     return rows.sort((a, b) => {
       const x = sortValue(a, sort.key);
@@ -190,7 +203,11 @@ export const Competitors = () => {
       if (y === null) return -1;
       return (typeof x === 'string' ? x.localeCompare(y as string) : (x as number) - (y as number)) * dir;
     });
-  }, [data, sort]);
+  }, [data, sort, only]);
+  const families = useMemo(
+    () => [...new Set([...(data?.ours || []).map((o) => family(o.providerIdentifier)), ...(data?.competitors || []).map((c) => family(c.platform))])].sort(),
+    [data]
+  );
   const header = (key: SortKey, label: string, align: 'start' | 'end') => (
     <th className={clsx('font-normal pb-[6px]', align === 'end' ? 'text-end' : 'text-start')}>
       <button
@@ -218,6 +235,15 @@ export const Competitors = () => {
               </option>
             ))}
           </select>
+        )}
+        {families.length > 1 && (
+          <div className="flex rounded-[8px] border border-newTableBorder overflow-hidden text-[14px]">
+            {['', ...families].map((f) => (
+              <button key={f || 'all'} type="button" onClick={() => setOnly(f)} className={clsx('px-[12px] h-[34px]', only === f ? 'bg-[#612BD3] text-white' : 'hover:bg-newTableHeader')}>
+                {f || t('all', 'All')}
+              </button>
+            ))}
+          </div>
         )}
         <div className="flex rounded-[8px] border border-newTableBorder overflow-hidden text-[14px]">
           {[30, 90, 365].map((d) => (
@@ -300,11 +326,14 @@ export const Competitors = () => {
               </tbody>
             </table>
             <div className="text-[12px] text-textItemBlur">
-              {t('growth_note', 'From the first to the latest saved count in the period. Competitors start counting the day they’re added.')}
+              {t(
+                'growth_note',
+                'From the first to the latest saved count in the period. Competitors start counting the day they’re added. Your channels’ counts come from History, saved once a day; “Sync now” on History saves today’s.'
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 mobile:grid-cols-1 gap-[12px]">
-            {data.competitors.map((c) => (
+            {data.competitors.filter((c) => !only || family(c.platform) === only).map((c) => (
               <CompetitorCard key={c.id} c={c} isAdmin={isAdmin} refresh={() => mutate()} />
             ))}
           </div>
