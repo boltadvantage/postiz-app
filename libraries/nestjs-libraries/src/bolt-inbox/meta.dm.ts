@@ -88,12 +88,14 @@ export class MetaDms {
     const body = await res.json().catch(() => ({}));
     if (!res.ok || body?.error) {
       const e = body?.error || {};
+      // Meta's codes overlap (the same code covers the 24-hour window and other refusals), so always pass on its words
+      const said = ` (Meta said: ${e.message || `HTTP ${res.status}`}${e.error_subcode ? `, code ${e.code}/${e.error_subcode}` : e.code ? `, code ${e.code}` : ''})`;
       if (isWindowError(e)) {
-        throw new MetaDmError(`${this.platform === 'facebook' ? 'Facebook' : 'Instagram'} only lets you reply within 24 hours of their last message.`);
+        throw new MetaDmError(`${this.platform === 'facebook' ? 'Facebook' : 'Instagram'} only lets you reply within 24 hours of their last message.${said}`);
       }
       // keep Meta's own words: "permission" covers several different fixes
-      if (isPermissionError(e)) throw new MetaDmError(`${PERMISSION_HINT[this.platform]} (Meta said: ${e.message || `code ${e.code}`})`, true);
-      throw new MetaDmError(`${this.platform === 'facebook' ? 'Facebook' : 'Instagram'}: ${e.message || `HTTP ${res.status}`}`);
+      if (isPermissionError(e)) throw new MetaDmError(`${PERMISSION_HINT[this.platform]}${said}`, true);
+      throw new MetaDmError(`${this.platform === 'facebook' ? 'Facebook' : 'Instagram'} refused it.${said}`);
     }
     return body;
   }
