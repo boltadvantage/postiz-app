@@ -4,6 +4,7 @@ import { Activity, ActivityMethod } from 'nestjs-temporal-core';
 import { InboxService } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
 import { DmService } from '@gitroom/nestjs-libraries/bolt-inbox/dm.service';
 import { FollowsService } from '@gitroom/nestjs-libraries/bolt-inbox/follows.service';
+import { CompetitorsService } from '@gitroom/nestjs-libraries/bolt-competitors/competitors.service';
 import { QueueService } from '@gitroom/nestjs-libraries/bolt-queue/queue.service';
 
 @Injectable()
@@ -13,6 +14,7 @@ export class BoltInboxActivity {
     private _inbox: InboxService,
     private _dms: DmService,
     private _follows: FollowsService,
+    private _competitors: CompetitorsService,
     private _queue: QueueService
   ) {}
 
@@ -21,6 +23,8 @@ export class BoltInboxActivity {
     await this._inbox.syncAll();
     await this._dms.syncAll();
     await this._follows.syncAll();
+    // once a day each; cheap to ask every pass
+    await this._competitors.syncDue().catch(() => undefined);
   }
 
   /** Sunday-morning refresh of queues set to keep their times updated. */

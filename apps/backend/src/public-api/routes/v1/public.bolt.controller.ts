@@ -51,6 +51,18 @@ export class PublicBoltController {
     return wrap(() => this._api.respond(org.id, id, action, body?.text));
   }
 
+  // ---------- competitors ----------
+
+  @Get('/competitors')
+  competitors(@GetOrgFromRequest() org: Organization, @Query('clientId') clientId?: string, @Query('days') days?: string) {
+    return this._api.competitors(org.id, { clientId, days: Number(days) || 30 });
+  }
+
+  @Post('/competitors')
+  addCompetitor(@GetOrgFromRequest() org: Organization, @Body() body: { platform?: string; handle?: string; clientId?: string | null }) {
+    return wrap(() => this._api.addCompetitor(org.id, body || {}));
+  }
+
   // ---------- follows ----------
 
   @Get('/follows')

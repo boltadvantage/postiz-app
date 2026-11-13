@@ -202,6 +202,55 @@ model AnalyticsChannelDaily {
   @@index([organizationId, date])
 }
 
+/// Bolt Advantage: an account to watch (X, Instagram or Nostr), optionally for one client.
+model Competitor {
+  id             String    @id @default(cuid())
+  organizationId String
+  /// Postiz customer (client) it's tracked for; null = everyone
+  customerId     String?
+  platform       String
+  /// what the user typed (@handle, username, npub or name@domain)
+  handle         String
+  /// the platform's id once looked up
+  externalId     String?
+  name           String?
+  picture        String?
+  lastCheckAt    DateTime?
+  lastError      String?
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime?
+
+  @@index([organizationId])
+}
+
+/// Bolt Advantage: a competitor's follower count, once a day.
+model CompetitorDaily {
+  competitorId String
+  /// YYYY-MM-DD (UTC)
+  date         String
+  followers    Int?
+  posts        Int?
+
+  @@id([competitorId, date])
+}
+
+/// Bolt Advantage: a competitor's recent post with its engagement when last seen.
+model CompetitorPost {
+  id           String   @id @default(cuid())
+  competitorId String
+  externalId   String
+  text         String
+  url          String?
+  publishedAt  DateTime
+  likes        Int      @default(0)
+  reposts      Int      @default(0)
+  replies      Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  @@unique([competitorId, externalId])
+  @@index([competitorId, publishedAt])
+}
+
 /// Bolt Advantage: paid API reads per provider per day (the X spending cap).
 model AnalyticsApiUsage {
   provider String
