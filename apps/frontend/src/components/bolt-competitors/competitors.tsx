@@ -47,6 +47,11 @@ const signed = (n: number | null, suffix = '') => (n === null ? '—' : `${n > 0
 const profileUrl = (c: Competitor) =>
   c.platform === 'x' ? `https://x.com/${c.handle}` : c.platform === 'instagram' ? `https://www.instagram.com/${c.handle}/` : `https://primal.net/p/${c.handle}`;
 
+type SortKey = 'name' | 'followers' | 'change' | 'percent';
+// no number sorts last whichever way the column is sorted
+const sortValue = (r: { name: string; growth: Growth }, key: SortKey) =>
+  key === 'name' ? r.name.toLowerCase() : key === 'followers' ? r.growth.end : key === 'change' ? r.growth.change : r.growth.percent;
+
 const input = 'bg-newBgColorInner h-[36px] border-newTableBorder border rounded-[8px] px-[10px] text-[14px] text-textColor outline-none';
 
 const CompetitorCard: FC<{ c: Competitor; isAdmin: boolean; refresh: () => void }> = ({ c, isAdmin, refresh }) => {
@@ -143,6 +148,9 @@ export const Competitors = () => {
   const [handle, setHandle] = useState('');
   const [forClient, setForClient] = useState('');
   const [adding, setAdding] = useState(false);
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'percent', dir: 'desc' });
+  const sortBy = (key: SortKey) =>
+    setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'name' ? 'asc' : 'desc' }));
 
   const { data: integrations } = useIntegrationList();
   const clients = useMemo(() => {
@@ -173,8 +181,29 @@ export const Competitors = () => {
       ...(data?.ours || []).map((o) => ({ key: `o-${o.id}`, ours: true, name: o.name, picture: o.picture, platform: o.providerIdentifier, growth: o.growth })),
       ...(data?.competitors || []).map((c) => ({ key: `c-${c.id}`, ours: false, name: c.name || c.handle, picture: c.picture, platform: c.platform, growth: c.growth })),
     ];
-    return rows.sort((a, b) => (b.growth.percent ?? -Infinity) - (a.growth.percent ?? -Infinity));
-  }, [data]);
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    return rows.sort((a, b) => {
+      const x = sortValue(a, sort.key);
+      const y = sortValue(b, sort.key);
+      if (x === null && y === null) return 0;
+      if (x === null) return 1;
+      if (y === null) return -1;
+      return (typeof x === 'string' ? x.localeCompare(y as string) : (x as number) - (y as number)) * dir;
+    });
+  }, [data, sort]);
+  const header = (key: SortKey, label: string, align: 'start' | 'end') => (
+    <th className={clsx('font-normal pb-[6px]', align === 'end' ? 'text-end' : 'text-start')}>
+      <button
+        type="button"
+        onClick={() => sortBy(key)}
+        className={clsx('inline-flex items-center gap-[4px] hover:text-textColor', sort.key === key && 'text-textColor')}
+        aria-sort={sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      >
+        {label}
+        <span className={clsx('text-[10px]', sort.key !== key && 'opacity-0')}>{sort.dir === 'asc' ? '▲' : '▼'}</span>
+      </button>
+    </th>
+  );
 
   return (
     <div className="bg-newBgColorInner p-[20px] mobile:p-[12px] flex flex-1 flex-col gap-[20px] overflow-y-auto">
@@ -247,10 +276,10 @@ export const Competitors = () => {
             <table className="w-full text-[14px]">
               <thead>
                 <tr className="text-[12px] text-textItemBlur">
-                  <th className="text-start font-normal pb-[6px]">{t('account', 'Account')}</th>
-                  <th className="text-end font-normal pb-[6px]">{t('followers', 'Followers')}</th>
-                  <th className="text-end font-normal pb-[6px]">{t('change', 'Change')}</th>
-                  <th className="text-end font-normal pb-[6px]">{t('growth', 'Growth')}</th>
+                  {header('name', t('account', 'Account'), 'start')}
+                  {header('followers', t('followers', 'Followers'), 'end')}
+                  {header('change', t('change', 'Change'), 'end')}
+                  {header('percent', t('growth', 'Growth'), 'end')}
                 </tr>
               </thead>
               <tbody>
