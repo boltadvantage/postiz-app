@@ -38,7 +38,9 @@ type Item = {
 };
 
 const DM_PLATFORMS = ['nostr', 'x', 'facebook', 'instagram'];
-const MENTION_PLATFORMS = ['nostr', 'x', 'facebook'];
+const MENTION_PLATFORMS = ['nostr', 'x', 'facebook', 'instagram'];
+// comment-style platforms: no quotes or reposts
+const COMMENT_PLATFORMS = ['facebook', 'instagram'];
 const FOLLOW_PLATFORMS = ['x', 'nostr'];
 const KINDS: Array<{ value: Item['kind']; label: string }> = [
   { value: 'mention', label: 'Mentions' },
@@ -149,28 +151,36 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
             {p?.muted && <span className="rounded-full bg-red-900/50 px-[8px] h-[20px] text-[11px] flex items-center">{t('muted', 'muted')}</span>}
             <span className="ms-auto flex items-center gap-[6px] text-[12px] text-textItemBlur whitespace-nowrap">
               <img src={channel?.picture || `/icons/platforms/${item.platform}.png`} className="w-[16px] h-[16px] rounded-full" alt="" />
-              {item.platform === 'facebook' ? t('comment', 'Comment') : item.kind === 'reply' ? t('reply', 'Reply') : item.kind === 'quote' ? t('quote', 'Quote') : t('mention', 'Mention')} · {dayjs(item.publishedAt).fromNow()}
+              {item.platform === 'instagram' && item.kind === 'mention'
+                ? t('tagged_you', 'Tagged you')
+                : COMMENT_PLATFORMS.includes(item.platform)
+                ? t('comment', 'Comment')
+                : item.kind === 'reply' ? t('reply', 'Reply') : item.kind === 'quote' ? t('quote', 'Quote') : t('mention', 'Mention')} · {dayjs(item.publishedAt).fromNow()}
             </span>
           </div>
           {item.inReplyToText && (
             <div className="mt-[4px] text-[12px] text-textItemBlur border-s-2 border-newTableBorder ps-[8px]">
-              {item.kind === 'quote' ? t('quoted_your_post', 'Quoted your post:') : item.platform === 'facebook' ? t('commenting_on', 'On:') : t('replying_to_you', 'Replying to your post:')} {short(item.platform === 'nostr' ? pretty(item.inReplyToText || '') : item.inReplyToText)}
+              {item.kind === 'quote' ? t('quoted_your_post', 'Quoted your post:') : COMMENT_PLATFORMS.includes(item.platform) ? t('commenting_on', 'On:') : t('replying_to_you', 'Replying to your post:')} {short(item.platform === 'nostr' ? pretty(item.inReplyToText || '') : item.inReplyToText)}
             </div>
           )}
           <div className="mt-[6px] text-[14px] whitespace-pre-wrap break-words">{item.platform === 'nostr' ? pretty(item.content) : item.content}</div>
           <div className="mt-[8px] flex flex-wrap items-center gap-[6px] text-[12px]">
-            <button type="button" onClick={() => setOpen(open === 'reply' ? null : 'reply')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder">
-              {t('reply', 'Reply')}{item.repliedAt ? ' ✓' : ''}
-            </button>
-            {item.platform !== 'facebook' && (
+            {!(item.platform === 'instagram' && item.kind === 'mention') && (
+              <button type="button" onClick={() => setOpen(open === 'reply' ? null : 'reply')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder">
+                {t('reply', 'Reply')}{item.repliedAt ? ' ✓' : ''}
+              </button>
+            )}
+            {!COMMENT_PLATFORMS.includes(item.platform) && (
               <button type="button" onClick={() => setOpen(open === 'quote' ? null : 'quote')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder">
                 {t('quote', 'Quote')}{item.quotedAt ? ' ✓' : ''}
               </button>
             )}
-            <button type="button" disabled={busy || !!item.likedAt} onClick={() => act('like')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder disabled:opacity-50">
-              {item.likedAt ? `♥ ${t('liked', 'Liked')}` : `♡ ${t('like', 'Like')}`}
-            </button>
-            {item.platform !== 'facebook' && (
+            {item.platform !== 'instagram' && (
+              <button type="button" disabled={busy || !!item.likedAt} onClick={() => act('like')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder disabled:opacity-50">
+                {item.likedAt ? `♥ ${t('liked', 'Liked')}` : `♡ ${t('like', 'Like')}`}
+              </button>
+            )}
+            {!COMMENT_PLATFORMS.includes(item.platform) && (
               <button type="button" disabled={busy || !!item.repostedAt} onClick={() => act('repost')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder disabled:opacity-50">
                 {item.repostedAt ? t('reposted', 'Reposted') : t('repost', 'Repost')}
               </button>
@@ -330,7 +340,7 @@ export const Inbox = () => {
               {view === 'mentions' && !!counts?.byChannel[c.id] && <span className="ms-auto text-[11px]">{counts.byChannel[c.id]}</span>}
             </button>
           ))}
-          {!channelList.length && <div className="text-[12px] text-textItemBlur">{t('inbox_no_channels', 'Connect X, Nostr or a Facebook Page to use the inbox.')}</div>}
+          {!channelList.length && <div className="text-[12px] text-textItemBlur">{t('inbox_no_channels', 'Connect X, Nostr, a Facebook Page or Instagram to use the inbox.')}</div>}
           {!!switches && (
             <ChannelSwitches
               channels={((integrations || []) as Channel[]).filter((c) => MENTION_PLATFORMS.includes(c.identifier) || DM_PLATFORMS.includes(c.identifier))}
