@@ -26,6 +26,20 @@ const PERMISSION_HINT: Record<MetaPlatform, string> = {
 const isPermissionError = (e: any) => e && (e.code === 10 || e.code === 200 || e.code === 230 || /permission/i.test(e.message || ''));
 const isWindowError = (e: any) => e && (e.error_subcode === 2018278 || e.error_subcode === 2534022 || /outside of allowed window/i.test(e.message || ''));
 
+/** Node's fetch says only "fetch failed" when it can't reach a server; say who and why instead. */
+export function unreachable(service: string, err: any) {
+  const code = err?.cause?.code || err?.cause?.name || err?.name;
+  const why =
+    code === 'ETIMEDOUT' || code === 'UND_ERR_CONNECT_TIMEOUT' || code === 'TimeoutError' || code === 'AbortError'
+      ? 'timed out'
+      : code === 'ENOTFOUND' || code === 'EAI_AGAIN'
+      ? 'address lookup failed'
+      : code === 'ECONNRESET' || code === 'UND_ERR_SOCKET'
+      ? 'connection dropped'
+      : code || 'network error';
+  return new Error(`Couldn't reach ${service} (${why}). It'll try again on the next check.`);
+}
+
 export class MetaDmError extends Error {
   constructor(message: string, public permission = false) {
     super(message);
@@ -65,7 +79,12 @@ export class MetaDms {
 
   private async call(path: string, init?: RequestInit) {
     const url = `${GRAPH}/${path}${path.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(pageToken(this.token))}`;
-    const res = await fetch(url, init);
+    let res: Response;
+    try {
+      res = await fetch(url, { ...init, signal: AbortSignal.timeout(30000) });
+    } catch (err) {
+      throw new MetaDmError(unreachable(this.platform === 'facebook' ? 'Facebook' : 'Instagram', err).message);
+    }
     const body = await res.json().catch(() => ({}));
     if (!res.ok || body?.error) {
       const e = body?.error || {};

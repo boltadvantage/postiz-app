@@ -5,6 +5,7 @@ import React, { FC, useState } from 'react';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { ChannelAvatar } from '@gitroom/frontend/components/bolt-shared/channel.avatar';
 
 export type Person = {
   id: string;
@@ -17,7 +18,7 @@ export type Person = {
   muted: boolean;
   note: string | null;
 };
-export type Channel = { id: string; name: string; picture: string | null; identifier: string; additionalSettings?: string };
+export type Channel = { id: string; name: string; picture: string | null; identifier: string; additionalSettings?: string; display?: string | null };
 export type Status = 'open' | 'unread' | 'archived' | 'all';
 
 // Nostr clients render nostr: links as embeds; show a short label instead of the raw code
@@ -251,5 +252,25 @@ export const ChannelSwitches: FC<{
         <span>{t('channel_checks_help', 'Off means nothing new is fetched for it. What’s already here stays.')}</span>
       </div>
     </details>
+  );
+};
+
+const PLATFORM_NAMES: Record<string, string> = { x: 'X', nostr: 'Nostr', facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', 'linkedin-page': 'LinkedIn Page' };
+export const platformName = (identifier: string) => PLATFORM_NAMES[identifier] || identifier;
+
+/** A channel's sync problem, saying exactly which account it is (several can share a name and picture). */
+export const ProblemNote: FC<{ channel?: Channel; message: string }> = ({ channel, message }) => {
+  const t = useT();
+  return (
+    <div className="flex items-start gap-[10px] rounded-[8px] border border-amber-500/40 bg-amber-500/10 px-[12px] py-[8px] text-[13px]">
+      {channel && <ChannelAvatar picture={channel.picture} platform={channel.identifier} size={24} />}
+      <div className="min-w-0">
+        <b>
+          {channel ? `${channel.name} · ${platformName(channel.identifier)}` : t('channel', 'Channel')}
+          {channel?.display ? ` (@${channel.display.replace(/^@/, '')})` : ''}:
+        </b>{' '}
+        {message}
+      </div>
+    </div>
   );
 };

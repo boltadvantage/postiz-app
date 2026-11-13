@@ -3,6 +3,7 @@
 // Postiz already holds (pages_read_engagement + pages_manage_engagement), and
 // costs nothing: Meta doesn't charge for the Graph API, it only rate-limits.
 import { META_GRAPH_API_VERSION } from '@gitroom/nestjs-libraries/integrations/social/facebook.provider';
+import { unreachable } from '@gitroom/nestjs-libraries/bolt-inbox/meta.dm';
 
 const GRAPH = `https://graph.facebook.com/${META_GRAPH_API_VERSION}`;
 /** How far back to look for posts that may have new comments. */
@@ -68,7 +69,12 @@ export class FacebookInbox {
 
   private async call(path: string, init?: RequestInit) {
     const url = `${GRAPH}/${path}${path.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(this.token)}`;
-    const res = await fetch(url, init);
+    let res: Response;
+    try {
+      res = await fetch(url, { ...init, signal: AbortSignal.timeout(30000) });
+    } catch (err) {
+      throw unreachable('Facebook', err);
+    }
     const body = await res.json().catch(() => ({}));
     if (!res.ok || body?.error) throw graphError(body, `HTTP ${res.status}`);
     return body;
