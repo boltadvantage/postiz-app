@@ -269,15 +269,50 @@ export const Inbox = () => {
   const { data: switches, mutate: mutateSwitches } = useSWR<{ mentions: string[]; messages: string[] }>('/inbox/switches', get);
   const { data: followSettings, mutate: mutateFollowSettings } = useSWR<Record<string, FollowSetting>>('/inbox/follows/settings', get);
   useEffect(() => setSelected([]), [query, view]);
+  // every channel this view covers; the sidebar groups them by client
   const channelList = useMemo(
-    () =>
-      allInboxChannels.filter(
-        (c) =>
-          (view === 'messages' ? DM_PLATFORMS : view === 'follows' ? FOLLOW_PLATFORMS : MENTION_PLATFORMS).includes(c.identifier) &&
-          (!clientIds || clientIds.includes(c.id))
-      ),
-    [allInboxChannels, view, clientIds]
+    () => allInboxChannels.filter((c) => (view === 'messages' ? DM_PLATFORMS : view === 'follows' ? FOLLOW_PLATFORMS : MENTION_PLATFORMS).includes(c.identifier)),
+    [allInboxChannels, view]
   );
+  const channelGroups = useMemo(() => {
+    const groups = clients
+      .map((cl) => ({ id: cl.id, name: cl.name, channels: channelList.filter((c) => c.customer?.id === cl.id) }))
+      .filter((g) => g.channels.length);
+    const loose = channelList.filter((c) => !c.customer?.id);
+    return loose.length ? [...groups, { id: '', name: groups.length ? t('no_client', 'No client') : '', channels: loose }] : groups;
+  }, [clients, channelList]);
+  // folded client groups, remembered in this browser like the calendar's
+  const [folded, setFolded] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('bolt-inbox-folded') || '[]');
+    } catch {
+      return [];
+    }
+  });
+  const fold = (id: string) => {
+    const next = folded.includes(id) ? folded.filter((x) => x !== id) : [...folded, id];
+    setFolded(next);
+    try {
+      localStorage.setItem('bolt-inbox-folded', JSON.stringify(next));
+    } catch {
+      /* private window */
+    }
+  };
+  const pickClient = (id: string) => {
+    setClient(client === id ? '' : id);
+    setChannels([]);
+    setPage(0);
+  };
+  const pickChannel = (c: Channel) => {
+    // a channel outside the chosen client switches back to all clients
+    if (client && (c.customer?.id || '') !== client) {
+      setClient('');
+      setChannels([c.id]);
+      setPage(0);
+      return;
+    }
+    toggle(channels, setChannels, c.id);
+  };
   const channelById = useMemo(() => new Map(channelList.map((c) => [c.id, c])), [channelList]);
   const refresh = useCallback(() => {
     mutate();
@@ -349,33 +384,58 @@ export const Inbox = () => {
             </button>
           ))}
         </div>
-        {!!clients.length && (
-          <div className={side}>
-            <div className="text-[11px] uppercase text-textItemBlur tracking-wide">{t('clients', 'Clients')}</div>
-            {[{ id: '', name: t('all_clients', 'All clients') }, ...clients].map((c) => (
-              <button
-                key={c.id || 'all'}
-                type="button"
-                onClick={() => (setClient(c.id), setChannels([]), setPage(0))}
-                className={pill(client === c.id)}
-              >
-                <span className="truncate">{c.name}</span>
-              </button>
-            ))}
-          </div>
-        )}
         <div className={side}>
-          <div className="text-[11px] uppercase text-textItemBlur tracking-wide">{t('channels', 'Channels')}</div>
-          {channelList.map((c) => (
-            <button key={c.id} type="button" onClick={() => toggle(channels, setChannels, c.id)} className={clsx(pill(channels.includes(c.id)), '!h-[48px] !gap-[12px]')}>
-              <ChannelAvatar picture={c.picture} platform={c.identifier} />
-              <span className="flex flex-col min-w-0 leading-tight">
-                <span className="truncate">{c.name}</span>
-                {(view === 'follows' ? !followSettings?.[c.id]?.on : switches?.[view].includes(c.id)) && <span className="text-[11px] opacity-70">{t('channel_off', 'off')}</span>}
-              </span>
-              {view === 'mentions' && !!counts?.byChannel[c.id] && <span className="ms-auto text-[11px]">{counts.byChannel[c.id]}</span>}
-            </button>
-          ))}
+          <div className="flex items-center">
+            <div className="text-[11px] uppercase text-textItemBlur tracking-wide">{t('channels', 'Channels')}</div>
+            {(client || channels.length > 0) && (
+              <button type="button" onClick={() => (setClient(''), setChannels([]), setPage(0))} className="ms-auto text-[11px] underline text-textItemBlur">
+                {t('show_all', 'Show all')}
+              </button>
+            )}
+          </div>
+          {channelGroups.map((g) => {
+            const dim = !!client && client !== g.id;
+            return (
+              <div key={g.id || 'none'} className={clsx('flex flex-col gap-[4px]', dim && 'opacity-50')}>
+                {!!g.name && (
+                  <div className={clsx('flex items-center gap-[6px] mt-[10px] rounded-[6px] text-[14px]', client === g.id && g.id && 'bg-[#612BD3] text-white')}>
+                    <button
+                      type="button"
+                      onClick={() => fold(g.id || 'none')}
+                      aria-label={folded.includes(g.id || 'none') ? t('expand', 'Expand') : t('collapse', 'Collapse')}
+                      className="w-[18px] h-[28px] flex items-center justify-center shrink-0"
+                    >
+                      <svg width="11" height="6" viewBox="0 0 22 12" fill="none" className={clsx('transition-transform', folded.includes(g.id || 'none') && '-rotate-90')}>
+                        <path d="M1 1l10 10L21 1H1z" fill="currentColor" stroke="currentColor" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => g.id && pickClient(g.id)}
+                      disabled={!g.id}
+                      title={g.id ? t('show_only_client', 'Show only this client') : undefined}
+                      className={clsx('flex-1 min-w-0 flex items-center gap-[6px] h-[28px] pe-[10px] text-start', !g.id && 'cursor-default')}
+                    >
+                      <span className="truncate">{g.name}</span>
+                      {view === 'mentions' && (
+                        <span className="ms-auto text-[11px]">{g.channels.reduce((n, c) => n + (counts?.byChannel[c.id] || 0), 0) || ''}</span>
+                      )}
+                    </button>
+                  </div>
+                )}
+                {!folded.includes(g.id || 'none') && g.channels.map((c) => (
+                  <button key={c.id} type="button" onClick={() => pickChannel(c)} className={clsx(pill(channels.includes(c.id)), '!h-[48px] !gap-[12px]')}>
+                    <ChannelAvatar picture={c.picture} platform={c.identifier} />
+                    <span className="flex flex-col min-w-0 leading-tight">
+                      <span className="truncate">{c.name}</span>
+                      {(view === 'follows' ? !followSettings?.[c.id]?.on : switches?.[view].includes(c.id)) && <span className="text-[11px] opacity-70">{t('channel_off', 'off')}</span>}
+                    </span>
+                    {view === 'mentions' && !!counts?.byChannel[c.id] && <span className="ms-auto text-[11px]">{counts.byChannel[c.id]}</span>}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
           {!channelList.length && <div className="text-[12px] text-textItemBlur">{t('inbox_no_channels', 'Connect X, Nostr, a Facebook Page or Instagram to use the inbox.')}</div>}
           {!!switches && (
             <ChannelSwitches
