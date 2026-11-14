@@ -1,7 +1,8 @@
 'use client';
 
 // Bolt Advantage: pieces the inbox's mentions and messages views share.
-import React, { FC, useState } from 'react';
+import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
+import clsx from 'clsx';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
@@ -282,5 +283,86 @@ export const ProblemNote: FC<{ channel?: Channel; message: string }> = ({ channe
         {message}
       </div>
     </div>
+  );
+};
+
+/**
+ * A button that only fires after being held down: a fill sweeps left to right
+ * and the action runs when it reaches the end. Letting go early cancels, so a
+ * stray click can't trigger it. Works with mouse, touch, and Space/Enter.
+ */
+export const HoldButton: FC<{ label: string; hint: string; onConfirm: () => void; disabled?: boolean; ms?: number; className?: string }> = ({
+  label,
+  hint,
+  onConfirm,
+  disabled,
+  ms = 1200,
+  className,
+}) => {
+  const [holding, setHolding] = useState(false);
+  const [showHint, setShowHint] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const started = useRef(0);
+
+  const stop = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    if (started.current && Date.now() - started.current < ms) {
+      // let go too soon: say how it works
+      setShowHint(true);
+      setTimeout(() => setShowHint(false), 1800);
+    }
+    started.current = 0;
+    setHolding(false);
+  }, [ms]);
+
+  const start = useCallback(() => {
+    if (disabled || timer.current) return;
+    started.current = Date.now();
+    setShowHint(false);
+    setHolding(true);
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      started.current = 0;
+      setHolding(false);
+      onConfirm();
+    }, ms);
+  }, [disabled, ms, onConfirm]);
+
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      title={hint}
+      aria-label={`${label}: ${hint}`}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        start();
+      }}
+      onPointerUp={stop}
+      onPointerLeave={() => timer.current && stop()}
+      onPointerCancel={stop}
+      onContextMenu={(e) => e.preventDefault()}
+      onKeyDown={(e) => {
+        if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) {
+          e.preventDefault();
+          start();
+        }
+      }}
+      onKeyUp={(e) => (e.key === ' ' || e.key === 'Enter') && stop()}
+      onBlur={() => timer.current && stop()}
+      className={clsx('relative overflow-hidden select-none touch-none', className)}
+    >
+      <span
+        aria-hidden
+        className="absolute inset-y-0 start-0 bg-red-500/40"
+        style={{ width: holding ? '100%' : '0%', transition: holding ? `width ${ms}ms linear` : 'width 150ms ease-out' }}
+      />
+      <span className="relative">{showHint ? hint : label}</span>
+    </button>
   );
 };
