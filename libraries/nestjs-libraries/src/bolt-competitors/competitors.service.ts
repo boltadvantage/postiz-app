@@ -1,5 +1,5 @@
 // Bolt Advantage: competitors — accounts on X, Instagram or Nostr to watch,
-// optionally per client. Once a day: follower count, and their newest posts
+// optionally per client. On a schedule each workspace picks (daily to monthly): follower count, and their newest posts
 // with engagement (ideas). Growth is compared with the client's own channels'
 // saved follower counts. X reads come out of History's share of the X budget.
 import { Injectable, Logger } from '@nestjs/common';
@@ -21,6 +21,15 @@ import {
 } from '@gitroom/nestjs-libraries/bolt-competitors/sources';
 
 const CHECK_EVERY_H = 23;
+/** How often a workspace's competitors are checked, in days. */
+export const CHECK_EVERY_OPTIONS = [1, 3, 7, 14, 30] as const;
+const settingKey = (organizationId: string) => `competitors-every:${organizationId}`;
+
+/** Due when never checked, or last checked a whole period ago (an hour early, so the time of day doesn't creep). */
+export function isDue(lastCheckAt: Date | null, everyDays: number, now = new Date()) {
+  if (!lastCheckAt) return true;
+  return now.getTime() - lastCheckAt.getTime() >= (everyDays * 24 - 1) * 3600_000;
+}
 const MANUAL_EVERY_MIN = 60;
 const MAX_PER_ORG = 50;
 const clip = (s: string | null | undefined, n: number) => (s ? s.slice(0, n) : null);
@@ -79,15 +88,38 @@ export class CompetitorsService {
     return this._prisma.competitor.findUnique({ where: { id } });
   }
 
+  // ---------- schedule ----------
+
+  /** Days between automatic checks for this workspace (default: every day). */
+  async checkEvery(organizationId: string) {
+    const row = await this._prisma.boltSetting.findUnique({ where: { key: settingKey(organizationId) } });
+    const n = Number(row?.value);
+    return (CHECK_EVERY_OPTIONS as readonly number[]).includes(n) ? n : 1;
+  }
+
+  async setCheckEvery(organizationId: string, everyDays: unknown) {
+    const n = Number(everyDays);
+    if (!(CHECK_EVERY_OPTIONS as readonly number[]).includes(n)) throw new Error('Pick how often to check');
+    await this._prisma.boltSetting.upsert({
+      where: { key: settingKey(organizationId) },
+      create: { key: settingKey(organizationId), value: String(n) },
+      update: { value: String(n) },
+    });
+    return { everyDays: n };
+  }
+
   // ---------- checking ----------
 
-  /** Run from the inbox's 10-minute pass: anyone not checked for a day. */
+  /** Run from the inbox's 10-minute pass: anyone due under their workspace's schedule. */
   async syncDue() {
-    const due = await this._prisma.competitor.findMany({
+    const candidates = await this._prisma.competitor.findMany({
       where: { deletedAt: null, OR: [{ lastCheckAt: null }, { lastCheckAt: { lt: dayjs().subtract(CHECK_EVERY_H, 'hour').toDate() } }] },
       orderBy: { lastCheckAt: { sort: 'asc', nulls: 'first' } },
-      take: 20,
+      take: 500,
     });
+    const every = new Map<string, number>();
+    for (const org of new Set(candidates.map((c) => c.organizationId))) every.set(org, await this.checkEvery(org));
+    const due = candidates.filter((c) => isDue(c.lastCheckAt, every.get(c.organizationId) || 1)).slice(0, 20);
     for (const c of due) {
       await this.check(c.id).catch((err) => this._logger.warn(`${c.platform} ${c.handle}: ${err?.message || err}`));
     }

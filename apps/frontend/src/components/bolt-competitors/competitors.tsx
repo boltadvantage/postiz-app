@@ -148,6 +148,14 @@ const CompetitorCard: FC<{ c: Competitor; isAdmin: boolean; refresh: () => void 
   );
 };
 
+const EVERY: [number, string, string][] = [
+  [1, 'every_day', 'Every day'],
+  [3, 'every_3_days', 'Every 3 days'],
+  [7, 'every_week', 'Once a week'],
+  [14, 'every_2_weeks', 'Every 2 weeks'],
+  [30, 'every_month', 'Once a month'],
+];
+
 export const Competitors = () => {
   const t = useT();
   const fetch = useFetch();
@@ -173,7 +181,7 @@ export const Competitors = () => {
   }, [integrations]);
 
   const get = useCallback(async (url: string) => (await fetch(url)).json(), []);
-  const { data, mutate, isLoading } = useSWR<{ competitors: Competitor[]; ours: Ours[] }>(
+  const { data, mutate, isLoading } = useSWR<{ competitors: Competitor[]; ours: Ours[]; everyDays?: number }>(
     `/bolt-competitors?days=${days}${client ? `&customerId=${client}` : ''}`,
     get
   );
@@ -187,6 +195,14 @@ export const Competitors = () => {
     toaster.show(body?.lastError ? body.lastError : t('competitor_added', 'Added'), body?.lastError ? 'warning' : 'success');
     setHandle('');
     mutate();
+  };
+
+  const setEvery = async (everyDays: number) => {
+    const res = await fetch('/bolt-competitors/schedule', { method: 'PUT', body: JSON.stringify({ everyDays }) });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return toaster.show(body?.message || t('could_not_save', 'Could not save'), 'warning');
+    mutate((d) => (d ? { ...d, everyDays } : d), { revalidate: false });
+    toaster.show(t('competitor_schedule_saved', 'Saved'), 'success');
   };
 
   const comparison = useMemo(() => {
@@ -286,6 +302,16 @@ export const Competitors = () => {
           <button type="button" disabled={adding || !handle.trim()} onClick={add} className="px-[16px] h-[36px] rounded-[8px] bg-[#612BD3] text-white disabled:opacity-40">
             {adding ? t('adding', 'Adding…') : t('add_competitor', 'Add competitor')}
           </button>
+          <label className="flex flex-col gap-[4px] ms-auto">
+            <span className="text-[12px] text-textItemBlur">{t('competitor_check_every', 'Check all competitors')}</span>
+            <select value={data?.everyDays || 1} onChange={(e) => setEvery(Number(e.target.value))} className={input}>
+              {EVERY.map(([n, key, label]) => (
+                <option key={n} value={n}>
+                  {t(key, label)}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       )}
 
