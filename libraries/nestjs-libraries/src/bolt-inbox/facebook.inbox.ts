@@ -128,4 +128,17 @@ export class FacebookInbox {
   async like(commentId: string) {
     await this.call(`${commentId}/likes`, { method: 'POST' });
   }
+
+  /** Hide a comment: only its writer and their friends still see it. */
+  async hide(commentId: string) {
+    await this.call(commentId, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_hidden: true }),
+    });
+  }
+
+  async remove(commentId: string) {
+    await this.call(commentId, { method: 'DELETE' });
+  }
 }
