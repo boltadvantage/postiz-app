@@ -153,23 +153,19 @@ export class FacebookInbox {
 
   /** Ban someone from the Page: they can't comment, react or message it any more. */
   async ban(userId: string) {
-    const tryAs = async (param: 'user' | 'asid' | 'psid') => {
-      const body = await this.call(`${this.pageId}/blocked`, {
+    // Facebook answers with a map keyed by its own id for the person, not
+    // always the one we sent, so any answer without an error means it worked
+    const tryAs = (param: 'user' | 'asid') =>
+      this.call(`${this.pageId}/blocked`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [param]: [userId] }),
       });
-      return body?.[userId] === true || body?.success === true;
-    };
-    let last: unknown;
-    // webhook ids are usually plain user ids; app-scoped ones need asid
-    for (const p of ['user', 'asid'] as const) {
-      try {
-        if (await tryAs(p)) return;
-      } catch (err) {
-        last = err;
-      }
+    try {
+      await tryAs('user');
+    } catch {
+      // webhook ids are app-scoped on some apps: those need asid
+      await tryAs('asid');
     }
-    throw last instanceof Error ? last : new Error('Facebook did not ban them');
   }
 }
