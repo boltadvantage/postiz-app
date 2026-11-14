@@ -114,7 +114,9 @@ export class MetaDms {
    * doesn't need it, but it's harmless). Safe to repeat.
    */
   async subscribe() {
-    const body = await this.call('me/subscribed_apps?subscribed_fields=messages', { method: 'POST' });
+    // the list replaces what was there: a Page keeps its comment pushes too
+    const fields = this.platform === 'facebook' ? 'feed,messages' : 'messages';
+    const body = await this.call(`me/subscribed_apps?subscribed_fields=${fields}`, { method: 'POST' });
     return !!body?.success;
   }
 
