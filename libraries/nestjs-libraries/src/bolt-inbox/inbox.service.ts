@@ -56,6 +56,9 @@ export const cleanTags = (tags: unknown) =>
 
 export const INBOX_ACTIONS = ['reply', 'repost', 'quote', 'like'] as const;
 export type InboxAction = (typeof INBOX_ACTIONS)[number];
+/** Moderating a comment on our own post (Facebook and Instagram). */
+export const MODERATE_ACTIONS = ['hide', 'delete'] as const;
+export type ModerateAction = (typeof MODERATE_ACTIONS)[number];
 const ACTION_STAMP = { reply: 'repliedAt', repost: 'repostedAt', quote: 'quotedAt', like: 'likedAt' } as const;
 
 /** X Premium ("Verified" in the channel's preferences) allows 25,000 characters. */
@@ -460,6 +463,46 @@ export class InboxService {
   nostrSecret(integration: Integration) {
     const { password } = (AuthService.verifyJWT(integration.token) as any) || {};
     return String(password || '');
+  }
+
+  /**
+   * Hide or delete a comment someone left on one of our posts. Works by the
+   * comment's id, so it doesn't need to know who wrote it. Hidden comments
+   * are archived here; deleted ones are removed from the inbox.
+   */
+  async moderate(organizationId: string, itemId: string, action: ModerateAction) {
+    const { item, integration } = await this.itemWithChannel(organizationId, itemId);
+    const token = await this.token(integration);
+    const target =
+      item.platform === 'facebook'
+        ? new FacebookInbox(integration.internalId, token)
+        : item.platform === 'instagram' && item.kind !== 'mention'
+        ? new InstagramInbox(integration.internalId, token)
+        : null;
+    if (!target) throw new Error('Only comments on your Facebook and Instagram posts can be hidden or deleted');
+    try {
+      if (action === 'hide') await target.hide(item.externalId);
+      else await target.remove(item.externalId);
+    } catch (err: any) {
+      // already gone on their side: just tidy up here
+      if (!/does not exist|cannot be loaded|Unsupported (post|delete) request/i.test(err?.message || '')) throw err;
+    }
+    if (action === 'delete') {
+      await this._prisma.inboxItem.delete({ where: { id: item.id } });
+    } else {
+      const stamp = new Date();
+      let raw: any = {};
+      try {
+        raw = JSON.parse(item.raw || '{}');
+      } catch {
+        raw = {};
+      }
+      await this._prisma.inboxItem.update({
+        where: { id: item.id },
+        data: { readAt: item.readAt || stamp, archivedAt: stamp, raw: JSON.stringify({ ...raw, hidden: true }) },
+      });
+    }
+    return { ok: true };
   }
 
   async act(organizationId: string, itemId: string, action: InboxAction, text?: string) {

@@ -83,6 +83,21 @@ describe('Facebook inbox', () => {
     expect(calls[3].url).toContain('/post1_c1/likes?');
   });
 
+  it('hides and deletes a comment by its id', async () => {
+    const calls: Array<{ url: string; init?: any }> = [];
+    (global as any).fetch = jest.fn(async (url: string, init?: any) => {
+      calls.push({ url, init });
+      return { ok: true, status: 200, json: async () => ({ success: true }) };
+    });
+    const fb = new FacebookInbox(PAGE, 't');
+    await fb.hide('post1_c1');
+    expect(calls[0].url).toContain('/post1_c1?access_token=');
+    expect(calls[0].init.method).toBe('POST');
+    expect(JSON.parse(calls[0].init.body)).toEqual({ is_hidden: true });
+    await fb.remove('post1_c1');
+    expect(calls[1].init).toEqual({ method: 'DELETE', signal: expect.anything() });
+  });
+
   it('explains permission errors', async () => {
     (global as any).fetch = jest.fn(async () => ({ ok: false, status: 403, json: async () => ({ error: { code: 200, message: 'Permissions error' } }) }));
     await expect(new FacebookInbox(PAGE, 't').comments(new Date())).rejects.toThrow('Reconnect this Page');

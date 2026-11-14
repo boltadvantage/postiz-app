@@ -143,4 +143,17 @@ export class InstagramInbox {
     });
     return String(body?.id || '') || null;
   }
+
+  /** Hide a comment: hidden from everyone but its writer. */
+  async hide(commentId: string) {
+    await this.call(commentId, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hide: true }),
+    });
+  }
+
+  async remove(commentId: string) {
+    await this.call(commentId, { method: 'DELETE' });
+  }
 }

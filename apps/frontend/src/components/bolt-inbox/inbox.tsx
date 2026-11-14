@@ -12,6 +12,7 @@ import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
+import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
 import { Channel, ChannelSwitches, FollowSetting, Person, PersonPanel, pretty, ProblemNote, SelectionBar, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
 import { Follows } from '@gitroom/frontend/components/bolt-inbox/follows';
 import { sortByChannelOrder, useChannelOrder } from '@gitroom/frontend/components/bolt-shared/channel.order';
@@ -127,6 +128,29 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
     setOpen(null);
     refresh();
   };
+  const canModerate = item.platform === 'facebook' || (item.platform === 'instagram' && item.kind !== 'mention');
+  const moderate = async (action: 'hide' | 'delete') => {
+    const where = item.platform === 'facebook' ? 'Facebook' : 'Instagram';
+    const ok = await deleteDialog(
+      action === 'hide'
+        ? t('hide_comment_confirm', 'Hide this comment on {{where}}? Only the person who wrote it (and their friends) will still see it.', { where })
+        : t('delete_comment_confirm', 'Delete this comment from {{where}}? This can’t be undone.', { where }),
+      action === 'hide' ? t('yes_hide', 'Yes, hide it') : t('yes_delete_it', 'Yes, delete it!'),
+      undefined,
+      undefined,
+      action === 'delete'
+    );
+    if (!ok) return;
+    setBusy(true);
+    const res = await fetch(`/inbox/${item.id}/${action}`, { method: 'POST', body: JSON.stringify({}) });
+    setBusy(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return toaster.show(body?.message || t('could_not_do_that', 'Could not do that'), 'warning');
+    }
+    toaster.show(action === 'hide' ? t('comment_hidden', 'Comment hidden') : t('comment_deleted', 'Comment deleted'), 'success');
+    refresh();
+  };
   const mark = async (action: 'read' | 'unread' | 'archive' | 'unarchive') => {
     await fetch('/inbox/mark', { method: 'POST', body: JSON.stringify({ ids: [item.id], action }) });
     refresh();
@@ -189,6 +213,16 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
               <a href={item.url} target="_blank" rel="noreferrer" className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder flex items-center">
                 {t('open', 'Open')}
               </a>
+            )}
+            {canModerate && (
+              <>
+                <button type="button" disabled={busy} onClick={() => moderate('hide')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder disabled:opacity-50">
+                  {t('hide', 'Hide')}
+                </button>
+                <button type="button" disabled={busy} onClick={() => moderate('delete')} className="px-[10px] h-[28px] rounded-[6px] border border-red-500/40 text-red-400 disabled:opacity-50">
+                  {t('delete', 'Delete')}
+                </button>
+              </>
             )}
             <span className="ms-auto flex gap-[6px]">
               <button type="button" onClick={() => mark(item.readAt ? 'unread' : 'read')} className="px-[10px] h-[28px] rounded-[6px] hover:bg-newBgColorInner">

@@ -3,7 +3,7 @@ import { Body, Controller, Get, HttpException, Param, Post, Put, Query } from '@
 import { ApiTags } from '@nestjs/swagger';
 import { Organization } from '@prisma/client';
 import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { INBOX_ACTIONS, InboxService } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
+import { INBOX_ACTIONS, InboxService, MODERATE_ACTIONS } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
 import { DmService } from '@gitroom/nestjs-libraries/bolt-inbox/dm.service';
 import { inboxSwitches, setInboxSwitch } from '@gitroom/nestjs-libraries/bolt-inbox/switches';
 import { FollowsService } from '@gitroom/nestjs-libraries/bolt-inbox/follows.service';
@@ -253,6 +253,7 @@ export class InboxController {
     @Param('action') action: string,
     @Body() body: { text?: string }
   ) {
+    if ((MODERATE_ACTIONS as readonly string[]).includes(action)) return wrap(() => this._inbox.moderate(org.id, id, action as any));
     if (!(INBOX_ACTIONS as readonly string[]).includes(action)) throw new HttpException('Unknown action', 400);
     return wrap(() => this._inbox.act(org.id, id, action as any, body?.text));
   }
