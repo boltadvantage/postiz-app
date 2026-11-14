@@ -29,10 +29,10 @@ describe('Facebook inbox', () => {
       targetId: 'page1_post1',
       targetText: 'Our town hall is Friday',
       threadId: 'post1_c1',
-      url: 'https://www.facebook.com/c1',
+      url: 'https://www.facebook.com/page1/posts/post1?comment_id=c1',
     });
     // a reply to a comment answers that comment, and is replied to on its thread
-    expect(items[1]).toMatchObject({ targetId: 'post1_c1', targetText: 'What time?', threadId: 'post1_c1', url: 'https://www.facebook.com/page1/posts/1' });
+    expect(items[1]).toMatchObject({ targetId: 'post1_c1', targetText: 'What time?', threadId: 'post1_c1', url: 'https://www.facebook.com/page1/posts/post1?comment_id=c1&reply_comment_id=c3' });
     // the Page's own reply still moves the cursor forward
     expect(newest.toISOString()).toBe('2026-11-03T12:00:00.000Z');
   });
