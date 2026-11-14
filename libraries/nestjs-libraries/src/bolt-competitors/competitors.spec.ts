@@ -1,4 +1,4 @@
-import { growth } from './competitors.service';
+import { growth, isDue } from './competitors.service';
 import { cleanHandle, nostrPubkey, parseDiscovery, parsePrimalFeed, parsePrimalProfile } from './sources';
 
 const PK = 'a'.repeat(64);
@@ -62,5 +62,17 @@ describe('competitors', () => {
     const { nip19 } = await import('nostr-tools');
     expect(await nostrPubkey(nip19.npubEncode(PK))).toBe(PK);
     await expect(nostrPubkey('not a key')).rejects.toThrow('npub');
+  });
+});
+
+describe('competitor schedule', () => {
+  const now = new Date('2026-11-14T12:00:00Z');
+  const ago = (h: number) => new Date(now.getTime() - h * 3600_000);
+  it('checks new competitors straight away', () => expect(isDue(null, 7, now)).toBe(true));
+  it('waits the whole period, less an hour', () => {
+    expect(isDue(ago(23), 1, now)).toBe(true);
+    expect(isDue(ago(22), 1, now)).toBe(false);
+    expect(isDue(ago(6 * 24), 7, now)).toBe(false);
+    expect(isDue(ago(7 * 24 - 1), 7, now)).toBe(true);
   });
 });
