@@ -13,7 +13,7 @@ import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
 import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
-import { Channel, ChannelSwitches, FollowSetting, Person, PersonPanel, pretty, ProblemNote, SelectionBar, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
+import { Channel, ChannelSwitches, FollowSetting, HoldButton, Person, PersonPanel, pretty, ProblemNote, SelectionBar, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
 import { Follows } from '@gitroom/frontend/components/bolt-inbox/follows';
 import { sortByChannelOrder, useChannelOrder } from '@gitroom/frontend/components/bolt-shared/channel.order';
 import { Messages } from '@gitroom/frontend/components/bolt-inbox/messages';
@@ -133,18 +133,18 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
   const canBan = item.platform === 'facebook' && !item.authorId?.startsWith('anon:');
   const moderate = async (action: 'hide' | 'delete' | 'ban') => {
     const where = item.platform === 'facebook' ? 'Facebook' : 'Instagram';
-    const who = p?.name || t('this_person', 'this person');
-    const ok = await deleteDialog(
+    // Ban is held down instead (see HoldButton), so it needs no second question
+    const ok =
+      action === 'ban' ||
+      (await deleteDialog(
       action === 'hide'
         ? t('hide_comment_confirm', 'Hide this comment on {{where}}? Only the person who wrote it (and their friends) will still see it.', { where })
-        : action === 'ban'
-        ? t('ban_confirm', 'Ban {{who}} from this Page? They won’t be able to comment, react or message it. This comment is hidden and their other comments leave the inbox.', { who })
         : t('delete_comment_confirm', 'Delete this comment from {{where}}? This can’t be undone.', { where }),
-      action === 'hide' ? t('yes_hide', 'Yes, hide it') : action === 'ban' ? t('yes_ban', 'Yes, ban them') : t('yes_delete_it', 'Yes, delete it!'),
+      action === 'hide' ? t('yes_hide', 'Yes, hide it') : t('yes_delete_it', 'Yes, delete it!'),
       undefined,
       undefined,
       action === 'delete'
-    );
+    ));
     if (!ok) return;
     setBusy(true);
     const res = await fetch(`/inbox/${item.id}/${action}`, { method: 'POST', body: JSON.stringify({}) });
@@ -228,9 +228,13 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
                   {t('delete', 'Delete')}
                 </button>
                 {canBan && (
-                  <button type="button" disabled={busy} onClick={() => moderate('ban')} className="px-[10px] h-[28px] rounded-[6px] border border-red-500/40 text-red-400 disabled:opacity-50">
-                    {t('ban', 'Ban')}
-                  </button>
+                  <HoldButton
+                    label={t('ban', 'Ban')}
+                    hint={t('hold_to_ban', 'Hold to ban')}
+                    disabled={busy}
+                    onConfirm={() => moderate('ban')}
+                    className="px-[10px] h-[28px] rounded-[6px] border border-red-500/40 text-red-400 disabled:opacity-50"
+                  />
                 )}
               </>
             )}
