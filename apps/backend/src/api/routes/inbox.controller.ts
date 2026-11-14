@@ -11,6 +11,7 @@ import { FOLLOW_PLATFORMS, saveFollowSetting } from '@gitroom/nestjs-libraries/b
 import { requireOrgAdmin } from '@gitroom/nestjs-libraries/user/require.org.admin';
 import { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+import { xBudgetSettings } from '@gitroom/nestjs-libraries/bolt-costs/x-billing';
 
 const list = (v?: string) => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : undefined);
 const wrap = async <T>(fn: () => Promise<T>) => {
@@ -77,13 +78,14 @@ export class InboxController {
 
   @Get('/counts')
   async counts(@GetOrgFromRequest() org: Organization) {
-    const [items, messages, xPaused, follows] = await Promise.all([
+    const [items, messages, xPaused, follows, budget] = await Promise.all([
       this._inbox.counts(org.id),
       this._dms.unreadCount(org.id),
       this._inbox.xPaused(org.id),
       this._follows.unreadCount(org.id),
+      xBudgetSettings(this._prisma),
     ]);
-    return { ...items, messages, xPaused, follows };
+    return { ...items, messages, xPaused, xBudgetZone: budget.timeZone, follows };
   }
 
   @Get('/tags')
