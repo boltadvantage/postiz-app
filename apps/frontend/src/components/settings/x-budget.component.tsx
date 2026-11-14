@@ -133,6 +133,7 @@ const XBudgetComponent = () => {
             'Today so far: ${{total}} (inbox ${{inbox}} of ${{inboxCap}}, History ${{history}} of ${{historyCap}}). Resets at midnight, {{zone}}.',
             {
               zone: data.timeZone,
+              interpolation: { escapeValue: false },
               total: data.spentToday.total.toFixed(2),
               inbox: data.spentToday.inbox.toFixed(2),
               inboxCap: data.inboxUsd.toFixed(2),
@@ -169,7 +170,7 @@ const XBudgetComponent = () => {
           </select>
           {zone !== browserZone() && (
             <button type="button" className="text-[13px] underline" onClick={() => setZone(browserZone())}>
-              {t('x_budget_zone_mine', 'Use mine ({{zone}})', { zone: browserZone() })}
+              {t('x_budget_zone_mine', 'Use mine ({{zone}})', { zone: browserZone(), interpolation: { escapeValue: false } })}
             </button>
           )}
         </div>
