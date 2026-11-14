@@ -191,7 +191,7 @@ const FollowSettingRow: FC<{ channel: Channel; setting?: FollowSetting; onChange
             {channel.identifier === 'nostr' ? t('follows_verified_nostr', 'verified (NIP-05)') : t('follows_verified', 'verified')}
           </label>
           <label className="flex items-center gap-[6px]">
-            {t('follows_or_min', 'or have at least')}
+            {t('follows_and_min', 'and have at least')}
             <input
               type="number"
               min="0"

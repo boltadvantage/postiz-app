@@ -9,12 +9,14 @@ describe('follows', () => {
     const all = { on: true, verified: false, minFollowers: 0 };
     expect(notable(all, { verified: false, followers: 3 })).toBe(true);
     const picky = { on: true, verified: true, minFollowers: 1000 };
-    expect(notable(picky, { verified: true, followers: 12 })).toBe(true);
-    expect(notable(picky, { verified: false, followers: 1500 })).toBe(true);
+    expect(notable(picky, { verified: true, followers: 12 })).toBe(false);
+    expect(notable(picky, { verified: true, followers: 1500 })).toBe(true);
+    // both must hold
+    expect(notable(picky, { verified: false, followers: 1500 })).toBe(false);
     expect(notable(picky, { verified: false, followers: 999 })).toBe(false);
     expect(notable(picky, { verified: false, followers: null })).toBe(false);
     expect(notable({ on: true, verified: true, minFollowers: 0 }, { verified: false, followers: 1e6 })).toBe(false);
-    expect(notableWhere('c1', picky)).toEqual({ integrationId: 'c1', OR: [{ verified: true }, { followers: { gte: 1000 } }] });
+    expect(notableWhere('c1', picky)).toEqual({ integrationId: 'c1', verified: true, followers: { gte: 1000 } });
     expect(notableWhere('c1', all)).toEqual({ integrationId: 'c1' });
   });
 

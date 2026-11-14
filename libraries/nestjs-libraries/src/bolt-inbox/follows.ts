@@ -38,19 +38,20 @@ export async function saveFollowSetting(prisma: PrismaService, organizationId: s
   return all;
 }
 
-/** Does this follower pass the channel's filter? With no filter set, everyone does. */
+/** Does this follower pass the channel's filter? Every condition set must hold; with none set, everyone does. */
 export function notable(s: FollowSetting, f: { verified: boolean; followers: number | null }) {
-  if (!s.verified && !s.minFollowers) return true;
-  return (s.verified && f.verified) || (!!s.minFollowers && (f.followers ?? 0) >= s.minFollowers);
+  if (s.verified && !f.verified) return false;
+  if (s.minFollowers && (f.followers ?? 0) < s.minFollowers) return false;
+  return true;
 }
 
 /** The same filter as a database condition, for one channel's rows. */
 export function notableWhere(integrationId: string, s: FollowSetting) {
-  if (!s.verified && !s.minFollowers) return { integrationId };
-  const or: any[] = [];
-  if (s.verified) or.push({ verified: true });
-  if (s.minFollowers) or.push({ followers: { gte: s.minFollowers } });
-  return { integrationId, OR: or };
+  return {
+    integrationId,
+    ...(s.verified ? { verified: true } : {}),
+    ...(s.minFollowers ? { followers: { gte: s.minFollowers } } : {}),
+  };
 }
 
 // ---------- X ----------
