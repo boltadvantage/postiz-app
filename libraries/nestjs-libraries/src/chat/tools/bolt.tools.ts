@@ -72,7 +72,7 @@ export class BoltFollowsListTool implements AgentToolInterface {
       mcp: read('List Follows (new followers and Nostr unfollows)'),
       description: `
 List people who followed the user's X and Nostr channels (event "follow"), and on Nostr who unfollowed ("unfollow"). Newest first, 50 per page.
-Only channels with Follows turned on in the inbox appear, and each channel may show only notable followers (verified, or at least a set number of followers of their own). "followsOff" is true when no channel has Follows on.
+Only channels with Follows turned on in the inbox appear, and each channel may show only notable followers (verified and/or at least a set number of followers of their own; every condition set must hold). "followsOff" is true when no channel has Follows on.
 Each item has the person (with the user's private tags and notes), their follower count when known, whether they're verified, and whether the user already followed back.
 `,
       inputSchema: z.object({

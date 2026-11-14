@@ -1,6 +1,6 @@
 // Bolt Advantage: who followed (and on Nostr, unfollowed) each channel, for the
 // inbox's Follows tab. Off per channel until turned on; each channel can show
-// only notable followers (verified, or at least N followers of their own).
+// only notable followers (verified and/or at least N followers of their own, whichever are set).
 import { Injectable, Logger } from '@nestjs/common';
 import { Integration } from '@prisma/client';
 import dayjs from 'dayjs';
