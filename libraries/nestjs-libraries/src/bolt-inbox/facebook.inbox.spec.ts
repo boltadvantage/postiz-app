@@ -91,9 +91,8 @@ describe('Facebook inbox', () => {
     });
     const fb = new FacebookInbox(PAGE, 't');
     await fb.hide('post1_c1');
-    expect(calls[0].url).toContain('/post1_c1?access_token=');
+    expect(calls[0].url).toContain('/post1_c1?is_hidden=true&access_token=');
     expect(calls[0].init.method).toBe('POST');
-    expect(JSON.parse(calls[0].init.body)).toEqual({ is_hidden: true });
     await fb.remove('post1_c1');
     expect(calls[1].init).toEqual({ method: 'DELETE', signal: expect.anything() });
   });

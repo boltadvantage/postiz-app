@@ -146,11 +146,8 @@ export class InstagramInbox {
 
   /** Hide a comment: hidden from everyone but its writer. */
   async hide(commentId: string) {
-    await this.call(commentId, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hide: true }),
-    });
+    // a plain form-style parameter: the comment endpoint doesn't reliably read JSON
+    await this.call(`${commentId}?hide=true`, { method: 'POST' });
   }
 
   async remove(commentId: string) {
