@@ -12,6 +12,7 @@ import { isLocked, withLock } from '@gitroom/nestjs-libraries/redis/bolt.lock';
 import { buildLike, buildQuote, buildReply, buildRepost, InboxKind, NostrInbox } from '@gitroom/nestjs-libraries/bolt-inbox/nostr.inbox';
 import { XInbox } from '@gitroom/nestjs-libraries/bolt-inbox/x.inbox';
 import { FacebookInbox } from '@gitroom/nestjs-libraries/bolt-inbox/facebook.inbox';
+import { WebhookComment } from '@gitroom/nestjs-libraries/bolt-inbox/facebook.webhook';
 import { IncomingInstagram, InstagramInbox } from '@gitroom/nestjs-libraries/bolt-inbox/instagram.inbox';
 import { switchChecker } from '@gitroom/nestjs-libraries/bolt-inbox/switches';
 import { UsageKind } from '@gitroom/nestjs-libraries/bolt-costs/usage';
@@ -57,7 +58,9 @@ export const cleanTags = (tags: unknown) =>
 export const INBOX_ACTIONS = ['reply', 'repost', 'quote', 'like'] as const;
 export type InboxAction = (typeof INBOX_ACTIONS)[number];
 /** Moderating a comment on our own post (Facebook and Instagram). */
-export const MODERATE_ACTIONS = ['hide', 'delete'] as const;
+export const MODERATE_ACTIONS = ['hide', 'delete', 'ban'] as const;
+const FB_AUTHOR_KEY = (commentId: string) => `bolt:fb-author:${commentId}`;
+const FB_WEBHOOK_STATUS = 'fb-webhook-status';
 export type ModerateAction = (typeof MODERATE_ACTIONS)[number];
 const ACTION_STAMP = { reply: 'repliedAt', repost: 'repostedAt', quote: 'quotedAt', like: 'likedAt' } as const;
 
@@ -258,6 +261,7 @@ export class InboxService {
     const state = await this.cursor(integration.id);
     const since = state?.since || dayjs().subtract(FACEBOOK_FIRST_RUN_DAYS, 'day').toDate();
     const fb = new FacebookInbox(integration.internalId, await this.token(integration));
+    await this.ensureFeedPushes(integration, fb);
     let page;
     try {
       page = await fb.comments(since);
@@ -266,6 +270,19 @@ export class InboxService {
       throw err;
     }
     const muted = await this.mutedAuthors(integration.organizationId, 'facebook');
+    for (const c of page.items) {
+      // the webhook may already have said who wrote it
+      if (c.author.id.startsWith('anon:')) {
+        const known = await ioRedis.get(FB_AUTHOR_KEY(c.id)).catch(() => null);
+        if (known) {
+          try {
+            c.author = JSON.parse(known);
+          } catch {
+            // keep it unnamed
+          }
+        }
+      }
+    }
     for (const c of page.items.filter((i) => !muted.has(i.author.id))) {
       await this.upsertPerson(integration.organizationId, 'facebook', c.author.id, { name: c.author.name });
       await this._prisma.inboxItem.upsert({
@@ -465,6 +482,45 @@ export class InboxService {
     return String(password || '');
   }
 
+  /** Once per connection: ask Facebook to push this Page's comments to the webhook. */
+  private async ensureFeedPushes(integration: Integration, fb: FacebookInbox) {
+    const id = `fb-feed-sub:${integration.id}`;
+    const state = await this.cursor(id);
+    if (state?.cursor === 'ok' && state.lastRunAt && state.lastRunAt >= integration.updatedAt) return;
+    try {
+      await fb.subscribe();
+      await this.saveCursor(id, { cursor: 'ok', error: null });
+    } catch (err: any) {
+      // comments still arrive every 10 minutes without it, just unnamed
+      await this.saveCursor(id, { cursor: null, error: clip(err?.message || String(err), 500) });
+    }
+  }
+
+  /**
+   * From a webhook push: who wrote which comment. Remembered for a month so
+   * the regular pass can name new comments, and applied to comments already
+   * in the inbox.
+   */
+  async learnFacebookAuthors(comments: WebhookComment[]) {
+    const named = comments.filter((c) => c.from && c.verb !== 'remove');
+    await this._prisma.boltSetting.upsert({
+      where: { key: FB_WEBHOOK_STATUS },
+      create: { key: FB_WEBHOOK_STATUS, value: JSON.stringify({ at: new Date(), comments: comments.length, withAuthor: named.length }) },
+      update: { value: JSON.stringify({ at: new Date(), comments: comments.length, withAuthor: named.length }) },
+    });
+    for (const c of named) {
+      const author = { id: c.from!.id, name: c.from!.name };
+      // our own Page's comments aren't inbox items
+      if (author.id === c.pageId) continue;
+      await ioRedis.set(FB_AUTHOR_KEY(c.commentId), JSON.stringify(author), 'EX', 30 * 86400).catch(() => undefined);
+      const items = await this._prisma.inboxItem.findMany({ where: { platform: 'facebook', externalId: c.commentId, authorId: { startsWith: 'anon:' } } });
+      for (const item of items) {
+        await this.upsertPerson(item.organizationId, 'facebook', author.id, { name: author.name });
+        await this._prisma.inboxItem.update({ where: { id: item.id }, data: { authorId: author.id } });
+      }
+    }
+  }
+
   /**
    * Hide or delete a comment someone left on one of our posts. Works by the
    * comment's id, so it doesn't need to know who wrote it. Hidden comments
@@ -473,6 +529,23 @@ export class InboxService {
   async moderate(organizationId: string, itemId: string, action: ModerateAction) {
     const { item, integration } = await this.itemWithChannel(organizationId, itemId);
     const token = await this.token(integration);
+    if (action === 'ban') {
+      if (item.platform !== 'facebook') throw new Error('Banning is only possible on Facebook Pages');
+      if (item.authorId.startsWith('anon:')) {
+        throw new Error("Facebook hasn't said who wrote this comment yet, so they can't be banned from here. Hide or delete it instead.");
+      }
+      const fb = new FacebookInbox(integration.internalId, token);
+      await fb.ban(item.authorId);
+      // their comment goes too: hidden, so they don't notice
+      await fb.hide(item.externalId).catch(() => undefined);
+      await this._prisma.inboxPerson.updateMany({ where: { organizationId, platform: 'facebook', authorId: item.authorId }, data: { muted: true } });
+      const stamp = new Date();
+      await this._prisma.inboxItem.updateMany({
+        where: { organizationId, platform: 'facebook', authorId: item.authorId, archivedAt: null },
+        data: { archivedAt: stamp, readAt: stamp },
+      });
+      return { ok: true };
+    }
     const target =
       item.platform === 'facebook'
         ? new FacebookInbox(integration.internalId, token)

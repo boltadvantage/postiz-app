@@ -25,6 +25,7 @@ type Item = {
   id: string;
   integrationId: string;
   platform: string;
+  authorId?: string;
   kind: 'mention' | 'reply' | 'quote';
   content: string;
   url: string | null;
@@ -129,13 +130,17 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
     refresh();
   };
   const canModerate = item.platform === 'facebook' || (item.platform === 'instagram' && item.kind !== 'mention');
-  const moderate = async (action: 'hide' | 'delete') => {
+  const canBan = item.platform === 'facebook' && !item.authorId?.startsWith('anon:');
+  const moderate = async (action: 'hide' | 'delete' | 'ban') => {
     const where = item.platform === 'facebook' ? 'Facebook' : 'Instagram';
+    const who = p?.name || t('this_person', 'this person');
     const ok = await deleteDialog(
       action === 'hide'
         ? t('hide_comment_confirm', 'Hide this comment on {{where}}? Only the person who wrote it (and their friends) will still see it.', { where })
+        : action === 'ban'
+        ? t('ban_confirm', 'Ban {{who}} from this Page? They won’t be able to comment, react or message it. This comment is hidden and their other comments leave the inbox.', { who })
         : t('delete_comment_confirm', 'Delete this comment from {{where}}? This can’t be undone.', { where }),
-      action === 'hide' ? t('yes_hide', 'Yes, hide it') : t('yes_delete_it', 'Yes, delete it!'),
+      action === 'hide' ? t('yes_hide', 'Yes, hide it') : action === 'ban' ? t('yes_ban', 'Yes, ban them') : t('yes_delete_it', 'Yes, delete it!'),
       undefined,
       undefined,
       action === 'delete'
@@ -148,7 +153,7 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
       const body = await res.json().catch(() => ({}));
       return toaster.show(body?.message || t('could_not_do_that', 'Could not do that'), 'warning');
     }
-    toaster.show(action === 'hide' ? t('comment_hidden', 'Comment hidden') : t('comment_deleted', 'Comment deleted'), 'success');
+    toaster.show(action === 'hide' ? t('comment_hidden', 'Comment hidden') : action === 'ban' ? t('person_banned', 'Banned from the Page') : t('comment_deleted', 'Comment deleted'), 'success');
     refresh();
   };
   const mark = async (action: 'read' | 'unread' | 'archive' | 'unarchive') => {
@@ -222,6 +227,11 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
                 <button type="button" disabled={busy} onClick={() => moderate('delete')} className="px-[10px] h-[28px] rounded-[6px] border border-red-500/40 text-red-400 disabled:opacity-50">
                   {t('delete', 'Delete')}
                 </button>
+                {canBan && (
+                  <button type="button" disabled={busy} onClick={() => moderate('ban')} className="px-[10px] h-[28px] rounded-[6px] border border-red-500/40 text-red-400 disabled:opacity-50">
+                    {t('ban', 'Ban')}
+                  </button>
+                )}
               </>
             )}
             <span className="ms-auto flex gap-[6px]">

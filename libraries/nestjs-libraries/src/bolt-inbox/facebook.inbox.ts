@@ -141,4 +141,35 @@ export class FacebookInbox {
   async remove(commentId: string) {
     await this.call(commentId, { method: 'DELETE' });
   }
+
+  /**
+   * Have Facebook push this Page's new comments to our webhook (with who wrote
+   * them). The list replaces what was there, so messages stay on it.
+   */
+  async subscribe() {
+    const body = await this.call(`${this.pageId}/subscribed_apps?subscribed_fields=feed,messages`, { method: 'POST' });
+    return !!body?.success;
+  }
+
+  /** Ban someone from the Page: they can't comment, react or message it any more. */
+  async ban(userId: string) {
+    const tryAs = async (param: 'user' | 'asid' | 'psid') => {
+      const body = await this.call(`${this.pageId}/blocked`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [param]: [userId] }),
+      });
+      return body?.[userId] === true || body?.success === true;
+    };
+    let last: unknown;
+    // webhook ids are usually plain user ids; app-scoped ones need asid
+    for (const p of ['user', 'asid'] as const) {
+      try {
+        if (await tryAs(p)) return;
+      } catch (err) {
+        last = err;
+      }
+    }
+    throw last instanceof Error ? last : new Error('Facebook did not ban them');
+  }
 }
