@@ -24,6 +24,18 @@ export type IncomingFacebook = {
   threadId: string;
 };
 
+const local = (id: string) => (id.includes('_') ? id.split('_').pop()! : id);
+
+/**
+ * A link that opens the comment on Facebook. Built from ids rather than
+ * Facebook's permalink_url, which it leaves out (or points at something the
+ * viewer can't open) when the app can't read user content.
+ */
+export function commentUrl(pageId: string, postId: string, commentId: string, threadId: string) {
+  const base = `https://www.facebook.com/${pageId}/posts/${local(postId)}?comment_id=${local(threadId)}`;
+  return threadId === commentId ? base : `${base}&reply_comment_id=${local(commentId)}`;
+}
+
 /** The feed answer → comments by other people newer than `since`, oldest first. */
 export function parseFeed(res: any, pageId: string, since: Date) {
   const items: IncomingFacebook[] = [];
@@ -42,7 +54,7 @@ export function parseFeed(res: any, pageId: string, since: Date) {
         id: c.id,
         text: c.message || (c.attachment ? '[attachment]' : ''),
         createdAt: new Date(at),
-        url: c.permalink_url || post.permalink_url || `https://www.facebook.com/${c.id}`,
+        url: commentUrl(pageId, post.id, c.id, parent?.id || c.id),
         // Facebook leaves out who wrote it unless the app has pages_read_user_content;
         // keep the comment anyway, as an unnamed person of its own
         author: c.from?.id ? { id: c.from.id, name: c.from.name } : { id: `anon:${c.id}`, name: 'Facebook user' },

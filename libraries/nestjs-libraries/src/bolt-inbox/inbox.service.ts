@@ -281,7 +281,7 @@ export class InboxService {
           raw: JSON.stringify({ thread: c.threadId }),
           publishedAt: c.createdAt,
         },
-        update: {},
+        update: { url: c.url },
       });
     }
     await this.saveCursor(integration.id, { since: page.newest, error: null });
