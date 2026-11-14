@@ -37,6 +37,16 @@ describe('Facebook inbox', () => {
     expect(newest.toISOString()).toBe('2026-11-03T12:00:00.000Z');
   });
 
+  it('keeps comments Facebook sends without an author, as an unnamed person', () => {
+    const { items } = parseFeed(
+      { data: [{ id: 'page1_p', message: 'Post', comments: { data: [{ id: 'p_c9', message: 'Hi', created_time: '2026-11-13T10:00:00+0000' }] } }] },
+      PAGE,
+      new Date('2026-11-12T00:00:00Z')
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0].author).toEqual({ id: 'anon:p_c9', name: 'Facebook user' });
+  });
+
   it('keeps the cursor when nothing is new', () => {
     const since = new Date('2026-11-04T00:00:00Z');
     const { items, newest } = parseFeed(feed, PAGE, since);

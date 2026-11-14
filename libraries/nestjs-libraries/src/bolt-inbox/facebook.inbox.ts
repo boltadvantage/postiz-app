@@ -36,14 +36,16 @@ export function parseFeed(res: any, pageId: string, since: Date) {
       if (!Number.isFinite(at) || at <= since.getTime()) continue;
       newest = Math.max(newest, at);
       // the Page's own comments and replies aren't inbox items
-      if (!c.from?.id || c.from.id === pageId) continue;
+      if (c.from?.id === pageId) continue;
       const parent = c.parent?.id ? byId.get(c.parent.id) || c.parent : null;
       items.push({
         id: c.id,
         text: c.message || (c.attachment ? '[attachment]' : ''),
         createdAt: new Date(at),
         url: c.permalink_url || post.permalink_url || `https://www.facebook.com/${c.id}`,
-        author: { id: c.from.id, name: c.from.name },
+        // Facebook leaves out who wrote it unless the app has pages_read_user_content;
+        // keep the comment anyway, as an unnamed person of its own
+        author: c.from?.id ? { id: c.from.id, name: c.from.name } : { id: `anon:${c.id}`, name: 'Facebook user' },
         targetId: parent?.id || post.id,
         targetText: (parent ? parent.message : post.message) || null,
         threadId: parent?.id || c.id,
