@@ -75,7 +75,9 @@ const graphError = (body: any, fallback: string) => {
   if (e.code === 10 || e.code === 200 || e.code === 190) {
     return new Error(`Facebook refused (${e.message}). Reconnect this Page in Postiz.`);
   }
-  return new Error(`Facebook: ${e.message || fallback}`);
+  // Facebook's generic "unknown error" says nothing on its own; the codes help
+  const codes = [e.code, e.error_subcode].filter((c) => c !== undefined && c !== null).join('/');
+  return new Error(`Facebook: ${e.error_user_msg || e.message || fallback}${codes ? ` (code ${codes})` : ''}`);
 };
 
 export class FacebookInbox {
@@ -131,11 +133,8 @@ export class FacebookInbox {
 
   /** Hide a comment: only its writer and their friends still see it. */
   async hide(commentId: string) {
-    await this.call(commentId, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_hidden: true }),
-    });
+    // a plain form-style parameter: the comment endpoint doesn't reliably read JSON
+    await this.call(`${commentId}?is_hidden=true`, { method: 'POST' });
   }
 
   async remove(commentId: string) {
