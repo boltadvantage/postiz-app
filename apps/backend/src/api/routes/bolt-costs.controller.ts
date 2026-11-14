@@ -41,6 +41,7 @@ export class BoltCostsController {
       await saveXBudgetSettings(this._prisma, {
         dailyUsd: body?.dailyUsd,
         inboxUsd: body?.inboxUsd,
+        timeZone: body?.timeZone,
         ...(body && 'ownerIntegrationId' in body ? { ownerIntegrationId: body.ownerIntegrationId || null } : {}),
         prices: body?.prices && typeof body.prices === 'object' ? body.prices : undefined,
       });

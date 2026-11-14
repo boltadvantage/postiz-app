@@ -22,7 +22,7 @@ jest.mock('@gitroom/nestjs-libraries/redis/redis.service', () => ({
   },
 }));
 
-import { chargeX, envBudget, hasLink, mergeBudget, priceX, saveXBudgetSettings, xBudgetLeft } from './x-billing';
+import { budgetDay, chargeX, envBudget, hasLink, mergeBudget, priceX, saveXBudgetSettings, xBudgetLeft } from './x-billing';
 
 const prices = { post: 0.005, user: 0.01, dm: 0.01, owned: 0.001, write: 0.015, writeUrl: 0.2 };
 
@@ -87,6 +87,16 @@ describe('X billing', () => {
     expect(envBudget().dailyUsd).toBe(2);
   });
 
+  it('starts the budget day at midnight in the chosen time zone', () => {
+    // 03:30 UTC on the 15th is still the evening of the 14th in Missouri
+    const d = new Date('2026-11-15T03:30:00Z');
+    expect(budgetDay('UTC', d)).toBe('2026-11-15');
+    expect(budgetDay('America/Chicago', d)).toBe('2026-11-14');
+    expect(budgetDay('Not/AZone', d)).toBe('2026-11-15');
+    expect(mergeBudget(envBudget(), { timeZone: 'Nope' }).timeZone).toBe('UTC');
+    expect(mergeBudget(envBudget(), { timeZone: 'America/Chicago' }).timeZone).toBe('America/Chicago');
+  });
+
   it("keeps the inbox's share inside the daily budget and ignores nonsense", () => {
     const m = mergeBudget(envBudget(), { dailyUsd: 2, inboxUsd: 5, prices: { post: 'abc', dm: -1 } });
     expect(m.inboxUsd).toBe(2);
@@ -98,8 +108,9 @@ describe('X billing', () => {
     const { prisma, usage, ledger } = fakePrisma();
     await expect(saveXBudgetSettings(prisma, { dailyUsd: 3, inboxUsd: 4 })).rejects.toThrow("can't be more");
     await expect(saveXBudgetSettings(prisma, { prices: { post: 5 } })).rejects.toThrow('between $0 and $1');
-    const s = await saveXBudgetSettings(prisma, { dailyUsd: 3, inboxUsd: 2 });
-    expect(s).toMatchObject({ dailyUsd: 3, inboxUsd: 2 });
+    await expect(saveXBudgetSettings(prisma, { timeZone: 'Mars/Olympus' })).rejects.toThrow('time zone');
+    const s = await saveXBudgetSettings(prisma, { dailyUsd: 3, inboxUsd: 2, timeZone: 'America/Chicago' });
+    expect(s).toMatchObject({ dailyUsd: 3, inboxUsd: 2, timeZone: 'America/Chicago' });
 
     // "mine" is the oldest X channel, so it's the app owner
     await chargeX(prisma, { id: 'mine', organizationId: 'o' }, 'inbox', 'x-inbox', { posts: [{ id: 'a', own: true }], users: [{ id: 'fan' }] });

@@ -262,7 +262,7 @@ export const Inbox = () => {
     ...(search ? { q: search } : {}),
   }).toString();
   const { data, mutate, isLoading } = useSWR<{ total: number; pages: number; items: Item[] }>(view === 'mentions' ? `/inbox?${query}` : null, get, { refreshInterval: 60000 });
-  const { data: counts, mutate: mutateCounts } = useSWR<{ unread: number; byChannel: Record<string, number>; messages: number; follows?: number; xPaused?: boolean; problems?: Record<string, string> }>('/inbox/counts', get, { refreshInterval: 60000 });
+  const { data: counts, mutate: mutateCounts } = useSWR<{ unread: number; byChannel: Record<string, number>; messages: number; follows?: number; xPaused?: boolean; xBudgetZone?: string; problems?: Record<string, string> }>('/inbox/counts', get, { refreshInterval: 60000 });
   const { data: tags, mutate: mutateTags } = useSWR<Array<{ tag: string; people: number }>>('/inbox/tags', get);
   const { data: muted, mutate: mutateMuted } = useSWR<Person[]>('/inbox/people?muted=true', get);
   const { data: switches, mutate: mutateSwitches } = useSWR<{ mentions: string[]; messages: string[] }>('/inbox/switches', get);
@@ -517,7 +517,7 @@ export const Inbox = () => {
         </div>
         {counts?.xPaused && (
           <div className="px-[12px] py-[8px] rounded-[8px] border border-amber-500/40 bg-amber-500/10 text-[13px]">
-            {t('x_paused_budget', "X paused: the inbox's share of today's X budget is used up, so X isn't checked again until it resets at midnight UTC. Nostr is still checked. You can raise it in Settings.")}
+            {t('x_paused_budget', "X paused: the inbox's share of today's X budget is used up, so X isn't checked again until it resets at midnight ({{zone}}). Nostr is still checked. You can raise it in Settings.", { zone: counts?.xBudgetZone || 'UTC' })}
           </div>
         )}
         {view === 'mentions' &&

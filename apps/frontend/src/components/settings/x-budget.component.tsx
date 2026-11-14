@@ -16,6 +16,7 @@ interface Budget {
   inboxUsd: number;
   historyUsd: number;
   ownerIntegrationId: string | null;
+  timeZone: string;
   effectiveOwnerId: string | null;
   prices: Prices;
   spentToday: { history: number; inbox: number; total: number };
@@ -34,6 +35,15 @@ const PRICE_LABELS: [keyof Prices, string, string][] = [
   ['write', 'x_price_write', 'Each reply, repost, like or message sent'],
   ['writeUrl', 'x_price_write_url', 'A reply or quote with a link'],
 ];
+
+const browserZone = () => (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC');
+const allZones = (): string[] => {
+  try {
+    return (Intl as any).supportedValuesOf('timeZone');
+  } catch {
+    return [browserZone(), 'UTC'];
+  }
+};
 
 const Money = ({ value, onChange, step = '0.01' }: { value: string; onChange: (v: string) => void; step?: string }) => (
   <div className="flex items-center gap-[6px]">
@@ -66,6 +76,7 @@ const XBudgetComponent = () => {
   const [daily, setDaily] = useState('');
   const [inbox, setInbox] = useState('');
   const [owner, setOwner] = useState('');
+  const [zone, setZone] = useState('UTC');
   const [prices, setPrices] = useState<Record<keyof Prices, string>>({ post: '', user: '', dm: '', owned: '', write: '', writeUrl: '' });
   const [showPrices, setShowPrices] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -76,6 +87,7 @@ const XBudgetComponent = () => {
     setDaily(String(data.dailyUsd));
     setInbox(String(data.inboxUsd));
     setOwner(data.ownerIntegrationId || '');
+    setZone(data.timeZone || 'UTC');
     setPrices(Object.fromEntries(Object.entries(data.prices).map(([k, v]) => [k, String(v)])) as any);
   }, [data]);
 
@@ -88,6 +100,7 @@ const XBudgetComponent = () => {
         dailyUsd: Number(daily),
         inboxUsd: Number(inbox),
         ownerIntegrationId: owner || null,
+        timeZone: zone,
         prices: Object.fromEntries(Object.entries(prices).map(([k, v]) => [k, Number(v)])),
       }),
     });
@@ -103,7 +116,7 @@ const XBudgetComponent = () => {
     }
     await mutate(await res.json(), { revalidate: false });
     toaster.show(t('x_budget_saved', 'X budget saved'), 'success');
-  }, [daily, inbox, owner, prices]);
+  }, [daily, inbox, owner, zone, prices]);
 
   if (!isAdmin || !data) return null;
 
@@ -117,8 +130,9 @@ const XBudgetComponent = () => {
         <div className="text-[14px] text-textItemBlur mt-[4px]">
           {t(
             'x_budget_status',
-            'Today so far: ${{total}} (inbox ${{inbox}} of ${{inboxCap}}, History ${{history}} of ${{historyCap}}). Resets at midnight UTC.',
+            'Today so far: ${{total}} (inbox ${{inbox}} of ${{inboxCap}}, History ${{history}} of ${{historyCap}}). Resets at midnight, {{zone}}.',
             {
+              zone: data.timeZone,
               total: data.spentToday.total.toFixed(2),
               inbox: data.spentToday.inbox.toFixed(2),
               inboxCap: data.inboxUsd.toFixed(2),
@@ -143,6 +157,23 @@ const XBudgetComponent = () => {
           <span className="h-[38px] flex items-center text-textItemBlur">${history.toFixed(2)}</span>
         </div>
       </div>
+      <label className="flex flex-col gap-[6px] text-[14px]">
+        <span>{t('x_budget_zone', 'A new day starts at midnight in')}</span>
+        <div className="flex flex-wrap items-center gap-[8px]">
+          <select value={zone} onChange={(e) => setZone(e.target.value)} className={`${input} max-w-[360px]`}>
+            {Array.from(new Set([zone, ...allZones(), 'UTC'])).map((z) => (
+              <option key={z} value={z}>
+                {z}
+              </option>
+            ))}
+          </select>
+          {zone !== browserZone() && (
+            <button type="button" className="text-[13px] underline" onClick={() => setZone(browserZone())}>
+              {t('x_budget_zone_mine', 'Use mine ({{zone}})', { zone: browserZone() })}
+            </button>
+          )}
+        </div>
+      </label>
       <div className="text-[13px] text-textItemBlur -mt-[8px]">
         {t(
           'x_budget_inbox_help',

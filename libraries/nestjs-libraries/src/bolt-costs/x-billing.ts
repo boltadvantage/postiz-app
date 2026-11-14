@@ -2,7 +2,8 @@
 // money. X charges per resource returned (an empty answer costs nothing), only
 // once per resource per UTC day, and $0.001 for the app owner's own data read
 // through their own app. Limits and prices are set in Settings, with the
-// BOLT_X_* env values as the defaults.
+// BOLT_X_* env values as the defaults. The budget's day starts at midnight in
+// the time zone picked there; X's own once-a-day de-duplication stays on UTC.
 import type { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 import { dayKey } from '@gitroom/nestjs-libraries/bolt-analytics/schedule';
@@ -30,6 +31,8 @@ export type XBudgetSettings = {
   inboxUsd: number;
   /** the X channel whose account owns the developer app; null = the oldest X channel */
   ownerIntegrationId: string | null;
+  /** the budget resets at midnight here (IANA name, e.g. America/Chicago) */
+  timeZone: string;
   prices: XPrices;
 };
 
@@ -47,6 +50,24 @@ const num = (v: unknown, fallback: number) => {
   const n = Number(v);
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 };
+/** A real IANA time zone, else the fallback. */
+export function validZone(zone: unknown, fallback = 'UTC') {
+  if (typeof zone !== 'string' || !zone) return fallback;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: zone });
+    return zone;
+  } catch {
+    return fallback;
+  }
+}
+
+/** The budget day (YYYY-MM-DD) that `d` falls on in `zone`. */
+export function budgetDay(zone: string, d = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: validZone(zone), year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
 const fromReads = (v: string | undefined) => (v === undefined || v === '' ? undefined : Number(v) * 0.005);
 
 /** Defaults from the environment; the old read caps convert at $0.005 a read. */
@@ -57,6 +78,7 @@ export function envBudget(): XBudgetSettings {
     dailyUsd,
     inboxUsd,
     ownerIntegrationId: null,
+    timeZone: validZone(process.env.BOLT_X_TIMEZONE),
     prices: {
       post: num(process.env.BOLT_X_READ_USD, 0.005),
       user: num(process.env.BOLT_X_USER_USD, 0.01),
@@ -76,6 +98,7 @@ export function mergeBudget(base: XBudgetSettings, saved: any): XBudgetSettings 
     dailyUsd,
     inboxUsd: Math.min(dailyUsd, num(saved?.inboxUsd, base.inboxUsd)),
     ownerIntegrationId: typeof saved?.ownerIntegrationId === 'string' && saved.ownerIntegrationId ? saved.ownerIntegrationId : base.ownerIntegrationId,
+    timeZone: validZone(saved?.timeZone, base.timeZone),
     prices: {
       post: Math.min(1, num(p.post, base.prices.post)),
       user: Math.min(1, num(p.user, base.prices.user)),
@@ -110,6 +133,9 @@ export async function saveXBudgetSettings(prisma: PrismaService, input: any) {
   if (bad(input?.dailyUsd, MAX_DAILY_USD)) throw new Error(`The daily budget must be between $0 and $${MAX_DAILY_USD}`);
   const daily = num(input?.dailyUsd, current.dailyUsd);
   if (bad(input?.inboxUsd, daily)) throw new Error("The inbox's share can't be more than the daily budget");
+  if (input?.timeZone !== undefined && input.timeZone !== null && input.timeZone !== '' && validZone(input.timeZone, '') !== input.timeZone) {
+    throw new Error('Pick a time zone from the list');
+  }
   for (const [k, v] of Object.entries(input?.prices || {})) {
     if (bad(v, 1)) throw new Error(`The ${k} price must be between $0 and $1`);
   }
@@ -141,7 +167,8 @@ export const poolLimit = (s: XBudgetSettings, pool: Exclude<XPool, 'x-write'>) =
 
 /** What a pool has spent today; things sent count against the inbox. */
 export async function spentToday(prisma: PrismaService) {
-  const rows = await prisma.analyticsApiUsage.findMany({ where: { provider: { in: ['x', 'x-inbox', 'x-write'] }, date: dayKey() } });
+  const { timeZone } = await xBudgetSettings(prisma);
+  const rows = await prisma.analyticsApiUsage.findMany({ where: { provider: { in: ['x', 'x-inbox', 'x-write'] }, date: budgetDay(timeZone) } });
   const usd = (p: XPool) => rows.find((r) => r.provider === p)?.usd || 0;
   return { history: usd('x'), inbox: usd('x-inbox') + usd('x-write'), total: usd('x') + usd('x-inbox') + usd('x-write') };
 }
@@ -206,9 +233,10 @@ export async function chargeX(
   const { usd, units } = await priceX(r, ownerId === integration.id, s.prices);
   if (!units) return 0;
   await recordChannelUsage(prisma, integration, kind, units, X_BILLED_PROVIDER, usd);
+  const date = budgetDay(s.timeZone);
   await prisma.analyticsApiUsage.upsert({
-    where: { provider_date: { provider: pool, date: dayKey() } },
-    create: { provider: pool, date: dayKey(), reads: units, usd },
+    where: { provider_date: { provider: pool, date } },
+    create: { provider: pool, date, reads: units, usd },
     update: { reads: { increment: units }, usd: { increment: usd } },
   });
   return usd;
