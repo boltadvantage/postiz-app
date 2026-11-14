@@ -561,7 +561,7 @@ export const Inbox = () => {
         </div>
         {counts?.xPaused && (
           <div className="px-[12px] py-[8px] rounded-[8px] border border-amber-500/40 bg-amber-500/10 text-[13px]">
-            {t('x_paused_budget', "X paused: the inbox's share of today's X budget is used up, so X isn't checked again until it resets at midnight ({{zone}}). Nostr is still checked. You can raise it in Settings.", { zone: counts?.xBudgetZone || 'UTC' })}
+            {t('x_paused_budget', "X paused: the inbox's share of today's X budget is used up, so X isn't checked again until it resets at midnight ({{zone}}). Nostr is still checked. You can raise it in Settings.", { zone: counts?.xBudgetZone || 'UTC', interpolation: { escapeValue: false } })}
           </div>
         )}
         {view === 'mentions' &&
