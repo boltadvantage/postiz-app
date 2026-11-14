@@ -53,4 +53,10 @@ describe('Facebook webhook', () => {
     await new FacebookInbox('164', 't').ban('999');
     expect(calls).toEqual([{ user: ['999'] }, { asid: ['999'] }]);
   });
+
+  it('counts any answer without an error as banned', async () => {
+    (global as any).fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ '100012345': true }) }));
+    await expect(new FacebookInbox('164', 't').ban('999')).resolves.toBeUndefined();
+    expect((global as any).fetch).toHaveBeenCalledTimes(1);
+  });
 });
