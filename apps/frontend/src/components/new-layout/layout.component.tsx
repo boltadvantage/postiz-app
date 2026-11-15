@@ -143,7 +143,7 @@ export const LayoutComponent = ({ children }: { children: ReactNode }) => {
                         </div>
                       </div>
                     </div>
-                    <div className="flex-1 min-w-0 bg-newBgLineColor rounded-[12px] overflow-hidden flex flex-col gap-[1px] blurMe">
+                    <div className="flex-1 min-w-0 bg-newBgLineColor rounded-[12px] overflow-hidden [&:has(#bolt-inbox)]:overflow-clip flex flex-col gap-[1px] blurMe">
                       {/* relative: the notifications popup spans this bar on phones */}
                       <div className="relative flex bg-newBgColorInner h-[80px] mobile:h-[64px] px-[20px] mobile:px-[12px] gap-[12px] items-center">
                         <button

@@ -425,7 +425,7 @@ export const Inbox = () => {
   const pill = (active: boolean) => clsx('text-start px-[10px] h-[30px] rounded-[6px] flex items-center gap-[8px]', active ? 'bg-[#612BD3] text-white' : 'hover:bg-newTableHeader');
 
   return (
-    <div className="bg-newBgColorInner flex flex-1 min-h-0 mobile:flex-col">
+    <div id="bolt-inbox" className="bg-newBgColorInner flex flex-1 min-h-0 mobile:flex-col">
       <div className="w-[230px] mobile:w-full shrink-0 p-[16px] flex flex-col gap-[18px] overflow-y-auto sticky top-0 self-start max-h-[100vh] mobile:static mobile:self-auto mobile:max-h-none">
         <div className="grid grid-cols-3 gap-[4px] p-[3px] rounded-[8px] bg-newTableHeader text-[12px]">
           {(['mentions', 'messages', 'follows'] as const).map((v) => {
