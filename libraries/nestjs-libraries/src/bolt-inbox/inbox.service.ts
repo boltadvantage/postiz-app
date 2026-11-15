@@ -557,8 +557,10 @@ export class InboxService {
       if (action === 'hide') await target.hide(item.externalId);
       else await target.remove(item.externalId);
     } catch (err: any) {
-      // already gone on their side: just tidy up here
-      if (!/does not exist|cannot be loaded|Unsupported (post|delete) request/i.test(err?.message || '')) throw err;
+      // already gone (or, for Hide, already hidden by Facebook's spam filter): just tidy up here
+      const done = /does not exist|cannot be loaded|Unsupported (post|delete) request/i.test(err?.message || '');
+      const alreadyHidden = action === 'hide' && /already marked as spam|already hidden|1446036/i.test(err?.message || '');
+      if (!done && !alreadyHidden) throw err;
     }
     if (action === 'delete') {
       await this._prisma.inboxItem.delete({ where: { id: item.id } });
