@@ -63,9 +63,11 @@ export class InboxController {
     @Query('tag') tag?: string,
     @Query('showMuted') showMuted?: string,
     @Query('q') q?: string,
-    @Query('page') page?: string
+    @Query('page') page?: string,
+    @Query('hideUnnamed') hideUnnamed?: string
   ) {
     return this._inbox.list(org.id, {
+      hideUnnamed: hideUnnamed === 'true',
       integrationIds: list(channels),
       kinds: list(kinds)?.filter((k) => ['mention', 'reply', 'quote'].includes(k)) as any,
       status: (['unread', 'open', 'archived', 'all'].includes(status || '') ? status : 'open') as any,
