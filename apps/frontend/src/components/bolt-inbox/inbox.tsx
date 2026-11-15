@@ -293,6 +293,22 @@ export const Inbox = () => {
   const [kinds, setKinds] = useState<string[]>([]);
   const [tag, setTag] = useState('');
   const [showMuted, setShowMuted] = useState(false);
+  // Facebook comments wait as "Facebook user" until the webhook says who wrote them
+  const [hideUnnamed, setHideUnnamedState] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('bolt-inbox-hide-unnamed') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const setHideUnnamed = (on: boolean) => {
+    setHideUnnamedState(on);
+    try {
+      localStorage.setItem('bolt-inbox-hide-unnamed', on ? '1' : '0');
+    } catch {
+      // not remembered, still applied
+    }
+  };
   const [q, setQ] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
@@ -307,6 +323,7 @@ export const Inbox = () => {
     ...(kinds.length ? { kinds: kinds.join(',') } : {}),
     ...(tag ? { tag } : {}),
     ...(showMuted ? { showMuted: 'true' } : {}),
+    ...(hideUnnamed ? { hideUnnamed: 'true' } : {}),
     ...(search ? { q: search } : {}),
   }).toString();
   const { data, mutate, isLoading } = useSWR<{ total: number; pages: number; items: Item[] }>(view === 'mentions' ? `/inbox?${query}` : null, get, { refreshInterval: 60000 });
@@ -523,6 +540,12 @@ export const Inbox = () => {
             <input type="checkbox" checked={showMuted} onChange={(e) => (setShowMuted(e.target.checked), setPage(0))} />
             {t('show_muted', 'Show muted people')}
           </label>
+          {view === 'mentions' && (
+            <label className="flex items-center gap-[8px] cursor-pointer px-[2px]">
+              <input type="checkbox" checked={hideUnnamed} onChange={(e) => (setHideUnnamed(e.target.checked), setPage(0))} />
+              {t('hide_unnamed_facebook', 'Hide unnamed Facebook users')}
+            </label>
+          )}
           {!!muted?.length && (
             <details className="text-[12px] text-textItemBlur">
               <summary className="cursor-pointer">{t('muted_count', '{{n}} muted', { n: muted.length })}</summary>
@@ -596,7 +619,7 @@ export const Inbox = () => {
           <LoadingComponent />
         ) : !data?.items.length ? (
           <div className="text-[14px] text-textItemBlur py-[24px] text-center">
-            {search || tag || kinds.length || activeChannels.length ? t('inbox_nothing_matches', 'Nothing matches these filters.') : t('inbox_empty', 'Nothing here yet. New mentions show up within about 10 minutes.')}
+            {search || tag || kinds.length || activeChannels.length || hideUnnamed ? t('inbox_nothing_matches', 'Nothing matches these filters.') : t('inbox_empty', 'Nothing here yet. New mentions show up within about 10 minutes.')}
           </div>
         ) : (
           <>

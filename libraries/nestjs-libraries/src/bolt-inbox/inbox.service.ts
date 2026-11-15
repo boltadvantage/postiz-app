@@ -38,6 +38,8 @@ export type InboxFilters = {
   status?: 'unread' | 'open' | 'archived' | 'all';
   tag?: string;
   showMuted?: boolean;
+  /** leave out Facebook comments whose writer we don't know yet */
+  hideUnnamed?: boolean;
   q?: string;
   page?: number;
 };
@@ -369,6 +371,9 @@ export class InboxService {
     const and: any[] = [];
     if (!f.showMuted && muted.length) {
       and.push({ NOT: { OR: muted.map((p) => ({ platform: p.platform, authorId: p.authorId })) } });
+    }
+    if (f.hideUnnamed) {
+      and.push({ NOT: { platform: 'facebook', authorId: { startsWith: 'anon:' } } });
     }
     if (tagged) {
       and.push(tagged.length ? { OR: tagged.map((p) => ({ platform: p.platform, authorId: p.authorId })) } : { id: '__none__' });
