@@ -332,6 +332,8 @@ model InboxItem {
   inReplyToText    String?
   /// Nostr: the original signed event (reposts must embed it)
   raw              String?
+  /// alert words found in it (comma-separated); a muted person's alert comment still comes in
+  alertWords       String?
   publishedAt      DateTime
   readAt           DateTime?
   archivedAt       DateTime?

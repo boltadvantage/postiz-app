@@ -15,6 +15,7 @@ import { FacebookInbox } from '@gitroom/nestjs-libraries/bolt-inbox/facebook.inb
 import { WebhookComment } from '@gitroom/nestjs-libraries/bolt-inbox/facebook.webhook';
 import { IncomingInstagram, InstagramInbox } from '@gitroom/nestjs-libraries/bolt-inbox/instagram.inbox';
 import { switchChecker } from '@gitroom/nestjs-libraries/bolt-inbox/switches';
+import { alertMatcher, alertWords } from '@gitroom/nestjs-libraries/bolt-inbox/alert-words';
 import { UsageKind } from '@gitroom/nestjs-libraries/bolt-costs/usage';
 import { chargeX, hasLink, worstItem, xBudgetLeft, xBudgetSettings, XPool, XResources } from '@gitroom/nestjs-libraries/bolt-costs/x-billing';
 
@@ -141,6 +142,28 @@ export class InboxService {
     return new Set(rows.map((r) => r.authorId));
   }
 
+  /** text → alert words in it, from this channel's list. */
+  async alerts(integration: Integration) {
+    return alertMatcher((await alertWords(this._prisma, integration.organizationId))[integration.id] || []);
+  }
+
+  /**
+   * A muted person used an alert word: their comment comes in anyway, and the
+   * first time it's seen, Postiz notifies (in the bell and as a desktop notice).
+   */
+  private async alertMuted(integration: Integration, externalId: string, who: string | undefined, platform: string, text: string, words: string[]) {
+    const seen = await this._prisma.inboxItem.findUnique({ where: { integrationId_externalId: { integrationId: integration.id, externalId } }, select: { id: true } });
+    if (seen) return;
+    const name = (who || 'Someone').slice(0, 60);
+    const place = { x: 'X', facebook: 'Facebook', instagram: 'Instagram', nostr: 'Nostr' }[platform] || platform;
+    await this._prisma.notifications.create({
+      data: {
+        organizationId: integration.organizationId,
+        content: `Muted ${name} on ${place} used an alert word (${words.join(', ')}): "${(clip(text, 140) || '').replace(/\s+/g, ' ')}" Check the inbox to ban them.`,
+      },
+    }).catch(() => undefined);
+  }
+
   async upsertPerson(organizationId: string, platform: string, authorId: string, p: { handle?: string; name?: string; avatar?: string }) {
     const data = {
       ...(p.handle ? { handle: clip(p.handle, 100) } : {}),
@@ -163,12 +186,15 @@ export class InboxService {
     try {
       const incoming = await nostr.incoming(relays, integration.internalId, since);
       const muted = await this.mutedAuthors(integration.organizationId, 'nostr');
-      const keep = incoming.filter((i) => !muted.has(i.event.pubkey));
+      const alert = await this.alerts(integration);
+      const keep = incoming.filter((i) => !muted.has(i.event.pubkey) || alert(i.event.content).length);
       const profiles = await nostr.profiles(relays, [...new Set(keep.map((i) => i.event.pubkey))]);
       const targets = await nostr.events(relays, [...new Set(keep.map((i) => i.targetId).filter(Boolean) as string[])]);
       for (const i of keep) {
         const e = i.event;
         await this.upsertPerson(integration.organizationId, 'nostr', e.pubkey, profiles.get(e.pubkey) || {});
+        const words = alert(e.content);
+        if (muted.has(e.pubkey)) await this.alertMuted(integration, e.id, profiles.get(e.pubkey)?.name, 'nostr', e.content, words);
         await this._prisma.inboxItem.upsert({
           where: { integrationId_externalId: { integrationId: integration.id, externalId: e.id } },
           create: {
@@ -183,6 +209,7 @@ export class InboxService {
             inReplyToId: i.targetId,
             inReplyToText: clip(targets.get(i.targetId || '')?.content, 280),
             raw: JSON.stringify(e),
+            alertWords: words.join(',') || null,
             publishedAt: new Date(e.created_at * 1000),
           },
           update: {},
@@ -236,8 +263,11 @@ export class InboxService {
     });
     await this.charge(integration, 'inbox', 'x-inbox', page.resources);
     const muted = await this.mutedAuthors(integration.organizationId, 'x');
-    for (const m of page.items.filter((i) => !muted.has(i.author.id))) {
+    const alert = await this.alerts(integration);
+    for (const m of page.items.filter((i) => !muted.has(i.author.id) || alert(i.text).length)) {
       await this.upsertPerson(integration.organizationId, 'x', m.author.id, m.author);
+      const words = alert(m.text);
+      if (muted.has(m.author.id)) await this.alertMuted(integration, m.id, m.author.name || m.author.handle, 'x', m.text, words);
       await this._prisma.inboxItem.upsert({
         where: { integrationId_externalId: { integrationId: integration.id, externalId: m.id } },
         create: {
@@ -251,6 +281,7 @@ export class InboxService {
           url: `https://x.com/${m.author.handle || 'i'}/status/${m.id}`,
           inReplyToId: m.targetId,
           inReplyToText: clip(m.targetText, 280),
+          alertWords: words.join(',') || null,
           publishedAt: m.createdAt,
         },
         update: {},
@@ -285,8 +316,11 @@ export class InboxService {
         }
       }
     }
-    for (const c of page.items.filter((i) => !muted.has(i.author.id))) {
+    const alert = await this.alerts(integration);
+    for (const c of page.items.filter((i) => !muted.has(i.author.id) || alert(i.text).length)) {
       await this.upsertPerson(integration.organizationId, 'facebook', c.author.id, { name: c.author.name });
+      const words = alert(c.text);
+      if (muted.has(c.author.id)) await this.alertMuted(integration, c.id, c.author.name, 'facebook', c.text, words);
       await this._prisma.inboxItem.upsert({
         where: { integrationId_externalId: { integrationId: integration.id, externalId: c.id } },
         create: {
@@ -301,6 +335,7 @@ export class InboxService {
           inReplyToId: c.targetId,
           inReplyToText: clip(c.targetText, 280),
           raw: JSON.stringify({ thread: c.threadId }),
+          alertWords: words.join(',') || null,
           publishedAt: c.createdAt,
         },
         update: { url: c.url },
@@ -336,8 +371,11 @@ export class InboxService {
 
   private async storeInstagram(integration: Integration, items: IncomingInstagram[]) {
     const muted = await this.mutedAuthors(integration.organizationId, 'instagram');
-    for (const c of items.filter((i) => !muted.has(i.author.id))) {
+    const alert = await this.alerts(integration);
+    for (const c of items.filter((i) => !muted.has(i.author.id) || alert(i.text).length)) {
       await this.upsertPerson(integration.organizationId, 'instagram', c.author.id, { handle: c.author.handle, name: c.author.handle });
+      const words = alert(c.text);
+      if (muted.has(c.author.id)) await this.alertMuted(integration, c.id, c.author.handle, 'instagram', c.text, words);
       await this._prisma.inboxItem.upsert({
         where: { integrationId_externalId: { integrationId: integration.id, externalId: c.id } },
         create: {
@@ -352,6 +390,7 @@ export class InboxService {
           inReplyToId: c.targetId,
           inReplyToText: clip(c.targetText, 280),
           raw: c.threadId ? JSON.stringify({ thread: c.threadId }) : null,
+          alertWords: words.join(',') || null,
           publishedAt: c.createdAt,
         },
         update: {},
@@ -370,7 +409,8 @@ export class InboxService {
 
     const and: any[] = [];
     if (!f.showMuted && muted.length) {
-      and.push({ NOT: { OR: muted.map((p) => ({ platform: p.platform, authorId: p.authorId })) } });
+      // a muted person's alert-word comments still show
+      and.push({ NOT: { AND: [{ OR: muted.map((p) => ({ platform: p.platform, authorId: p.authorId })) }, { alertWords: null }] } });
     }
     if (f.hideUnnamed) {
       and.push({ NOT: { platform: 'facebook', authorId: { startsWith: 'anon:' } } });
@@ -407,7 +447,7 @@ export class InboxService {
         organizationId,
         readAt: null,
         archivedAt: null,
-        ...(muted.length ? { NOT: { OR: muted.map((p) => ({ platform: p.platform, authorId: p.authorId })) } } : {}),
+        ...(muted.length ? { NOT: { AND: [{ OR: muted.map((p) => ({ platform: p.platform, authorId: p.authorId })) }, { alertWords: null }] } } : {}),
       },
       _count: { _all: true },
     });
@@ -522,6 +562,21 @@ export class InboxService {
       for (const item of items) {
         await this.upsertPerson(item.organizationId, 'facebook', author.id, { name: author.name });
         await this._prisma.inboxItem.update({ where: { id: item.id }, data: { authorId: author.id } });
+        // named only now: a muted person's alert-word comment still needs its notice
+        if (item.alertWords) {
+          const person = await this._prisma.inboxPerson.findUnique({
+            where: { organizationId_platform_authorId: { organizationId: item.organizationId, platform: 'facebook', authorId: author.id } },
+            select: { muted: true },
+          });
+          if (person?.muted) {
+            await this._prisma.notifications.create({
+              data: {
+                organizationId: item.organizationId,
+                content: `Muted ${(author.name || 'Someone').slice(0, 60)} on Facebook used an alert word (${item.alertWords.split(',').join(', ')}): "${(clip(item.content, 140) || '').replace(/\s+/g, ' ')}" Check the inbox to ban them.`,
+              },
+            }).catch(() => undefined);
+          }
+        }
       }
     }
   }
