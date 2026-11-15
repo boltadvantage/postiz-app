@@ -15,6 +15,7 @@ import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
 import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
 import { Channel, ChannelSwitches, FollowSetting, HoldButton, Person, PersonPanel, pretty, ProblemNote, SelectionBar, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
 import { Follows } from '@gitroom/frontend/components/bolt-inbox/follows';
+import { AlertWords } from '@gitroom/frontend/components/bolt-inbox/alert.words';
 import { sortByChannelOrder, useChannelOrder } from '@gitroom/frontend/components/bolt-shared/channel.order';
 import { Messages } from '@gitroom/frontend/components/bolt-inbox/messages';
 import { useIntegrationList } from '@gitroom/frontend/components/launches/helpers/use.integration.list';
@@ -37,6 +38,8 @@ type Item = {
   repostedAt: string | null;
   quotedAt: string | null;
   likedAt: string | null;
+  /** alert words it contains, comma-separated */
+  alertWords?: string | null;
   person: Person | null;
 };
 
@@ -179,6 +182,11 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
               <span key={tag} className="rounded-full bg-[#612BD3]/30 px-[8px] h-[20px] text-[11px] flex items-center">{tag}</span>
             ))}
             {p?.muted && <span className="rounded-full bg-red-900/50 px-[8px] h-[20px] text-[11px] flex items-center">{t('muted', 'muted')}</span>}
+            {!!item.alertWords && (
+              <span className="rounded-full bg-red-600 text-white px-[8px] h-[20px] text-[11px] flex items-center" title={item.alertWords}>
+                ⚠ {item.alertWords.split(',').join(', ')}
+              </span>
+            )}
             <span className="ms-auto flex items-center gap-[6px] text-[12px] text-textItemBlur whitespace-nowrap">
               <img src={channel?.picture || `/icons/platforms/${item.platform}.png`} className="w-[16px] h-[16px] rounded-full" alt="" />
               {item.platform === 'instagram' && item.kind === 'mention'
@@ -546,6 +554,7 @@ export const Inbox = () => {
               {t('hide_unnamed_facebook', 'Hide unnamed Facebook users')}
             </label>
           )}
+          {view === 'mentions' && <AlertWords channels={channelList} />}
           {!!muted?.length && (
             <details className="text-[12px] text-textItemBlur">
               <summary className="cursor-pointer">{t('muted_count', '{{n}} muted', { n: muted.length })}</summary>

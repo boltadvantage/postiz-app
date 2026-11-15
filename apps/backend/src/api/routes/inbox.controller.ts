@@ -3,7 +3,7 @@ import { Body, Controller, Get, HttpException, Param, Post, Put, Query } from '@
 import { ApiTags } from '@nestjs/swagger';
 import { Organization } from '@prisma/client';
 import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { INBOX_ACTIONS, InboxService, MODERATE_ACTIONS } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
+import { INBOX_ACTIONS, InboxService, MENTION_PROVIDERS, MODERATE_ACTIONS } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
 import { DmService } from '@gitroom/nestjs-libraries/bolt-inbox/dm.service';
 import { inboxSwitches, setInboxSwitch } from '@gitroom/nestjs-libraries/bolt-inbox/switches';
 import { FollowsService } from '@gitroom/nestjs-libraries/bolt-inbox/follows.service';
@@ -11,6 +11,7 @@ import { FOLLOW_PLATFORMS, saveFollowSetting } from '@gitroom/nestjs-libraries/b
 import { requireOrgAdmin } from '@gitroom/nestjs-libraries/user/require.org.admin';
 import { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+import { alertWords, saveAlertWords } from '@gitroom/nestjs-libraries/bolt-inbox/alert-words';
 import { xBudgetSettings } from '@gitroom/nestjs-libraries/bolt-costs/x-billing';
 
 const list = (v?: string) => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : undefined);
@@ -107,6 +108,23 @@ export class InboxController {
     @Body() body: { tags?: unknown; muted?: boolean; note?: string | null }
   ) {
     return wrap(() => this._inbox.updatePerson(org.id, id, body || {}));
+  }
+
+  /** Alert words per channel: a muted person's comment with one still comes in, with a notification. */
+  @Get('/alert-words')
+  alertWords(@GetOrgFromRequest() org: Organization) {
+    return alertWords(this._prisma, org.id);
+  }
+
+  @Put('/alert-words/:id')
+  async saveAlertWords(@GetOrgFromRequest() org: Organization, @Param('id') id: string, @Body() body: { words?: unknown }) {
+    requireOrgAdmin(org);
+    const channel = await this._prisma.integration.findFirst({
+      where: { id, organizationId: org.id, deletedAt: null, providerIdentifier: { in: MENTION_PROVIDERS } },
+      select: { id: true },
+    });
+    if (!channel) throw new HttpException('Channel not found', 404);
+    return saveAlertWords(this._prisma, org.id, id, body?.words);
   }
 
   @Post('/sync')
