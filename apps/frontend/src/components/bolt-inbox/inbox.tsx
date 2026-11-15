@@ -409,7 +409,7 @@ export const Inbox = () => {
 
   return (
     <div className="bg-newBgColorInner flex flex-1 min-h-0 mobile:flex-col">
-      <div className="w-[230px] mobile:w-full shrink-0 p-[16px] flex flex-col gap-[18px] border-e border-newTableBorder overflow-y-auto">
+      <div className="w-[230px] mobile:w-full shrink-0 p-[16px] flex flex-col gap-[18px] overflow-y-auto sticky top-0 self-start max-h-[100vh] mobile:static mobile:self-auto mobile:max-h-none">
         <div className="grid grid-cols-3 gap-[4px] p-[3px] rounded-[8px] bg-newTableHeader text-[12px]">
           {(['mentions', 'messages', 'follows'] as const).map((v) => {
             const n = v === 'mentions' ? counts?.unread : v === 'messages' ? counts?.messages : counts?.follows;
@@ -539,7 +539,7 @@ export const Inbox = () => {
         </div>
       </div>
 
-      <div className="flex-1 min-w-0 p-[16px] flex flex-col gap-[12px] overflow-y-auto">
+      <div className="flex-1 min-w-0 p-[16px] flex flex-col gap-[12px] overflow-y-auto border-s border-newTableBorder mobile:border-s-0">
         <div className="flex flex-wrap items-center gap-[10px]">
           <h2 className="text-[20px] font-[500] me-auto">{view === 'messages' ? t('messages', 'Messages') : view === 'follows' ? t('follows', 'Follows') : t('inbox', 'Inbox')}</h2>
           <form
