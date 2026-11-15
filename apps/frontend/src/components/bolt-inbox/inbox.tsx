@@ -16,11 +16,31 @@ import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
 import { Channel, ChannelSwitches, FollowSetting, HoldButton, Person, PersonPanel, pretty, ProblemNote, SelectionBar, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
 import { Follows } from '@gitroom/frontend/components/bolt-inbox/follows';
 import { AlertWords } from '@gitroom/frontend/components/bolt-inbox/alert.words';
+import { alertRanges } from '@gitroom/nestjs-libraries/bolt-inbox/alert-words';
 import { sortByChannelOrder, useChannelOrder } from '@gitroom/frontend/components/bolt-shared/channel.order';
 import { Messages } from '@gitroom/frontend/components/bolt-inbox/messages';
 import { useIntegrationList } from '@gitroom/frontend/components/launches/helpers/use.integration.list';
 import { ChannelAvatar } from '@gitroom/frontend/components/bolt-shared/channel.avatar';
 dayjs.extend(relativeTime);
+
+/** The comment text with its alert words marked, so it's clear what flagged it. */
+const Marked: FC<{ text: string; words?: string | null }> = ({ text, words }) => {
+  const ranges = words ? alertRanges(words.split(','), text) : [];
+  if (!ranges.length) return <>{text}</>;
+  const parts: React.ReactNode[] = [];
+  let at = 0;
+  ranges.forEach(([a, b], i) => {
+    if (a > at) parts.push(text.slice(at, a));
+    parts.push(
+      <mark key={i} className="bg-red-600 text-white rounded-[3px] px-[2px]">
+        ⚠ {text.slice(a, b)}
+      </mark>
+    );
+    at = b;
+  });
+  if (at < text.length) parts.push(text.slice(at));
+  return <>{parts}</>;
+};
 
 type Item = {
   id: string;
@@ -165,7 +185,7 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
   };
 
   return (
-    <div className={clsx('rounded-[8px] p-[12px] border', selected ? 'border-[#612BD3]' : item.readAt ? 'border-transparent' : 'border-[#612BD3]/50', item.readAt ? 'bg-newTableHeader/50' : 'bg-newTableHeader')}>
+    <div className={clsx('rounded-[8px] p-[12px] border', selected ? 'border-[#612BD3]' : item.alertWords ? 'border-red-600' : item.readAt ? 'border-transparent' : 'border-[#612BD3]/50', item.readAt ? 'bg-newTableHeader/50' : 'bg-newTableHeader')}>
       <div className="flex gap-[10px]">
         <input type="checkbox" checked={selected} onChange={(e) => onSelect(e.target.checked)} className="self-start mt-[10px] shrink-0 cursor-pointer" aria-label={t('select', 'Select')} />
         <div className="relative shrink-0 w-[36px] h-[36px]">
@@ -201,7 +221,9 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
               {item.kind === 'quote' ? t('quoted_your_post', 'Quoted your post:') : COMMENT_PLATFORMS.includes(item.platform) ? t('commenting_on', 'On:') : t('replying_to_you', 'Replying to your post:')} {short(item.platform === 'nostr' ? pretty(item.inReplyToText || '') : item.inReplyToText)}
             </div>
           )}
-          <div className="mt-[6px] text-[14px] whitespace-pre-wrap break-words">{item.platform === 'nostr' ? pretty(item.content) : item.content}</div>
+          <div className="mt-[6px] text-[14px] whitespace-pre-wrap break-words">
+            <Marked text={item.platform === 'nostr' ? pretty(item.content) : item.content} words={item.alertWords} />
+          </div>
           <div className="mt-[8px] flex flex-wrap items-center gap-[6px] text-[12px]">
             <button type="button" onClick={() => setOpen(open === 'reply' ? null : 'reply')} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder">
               {item.platform === 'instagram' && item.kind === 'mention' ? t('comment_on_post', 'Comment') : t('reply', 'Reply')}

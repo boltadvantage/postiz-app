@@ -50,6 +50,9 @@ export const AlertWords: FC<{ channels: Channel[] }> = ({ channels }) => {
         <div className="text-textItemBlur">
           {t('alert_words_help', 'A muted person who uses one of these still shows up, flagged, and you get a notification, so you can ban them.')}
         </div>
+        <div className="text-textItemBlur">
+          {t('alert_words_how', 'Disguises like f**k or sh!t are caught by the plain word. A word also catches longer forms (fuck → fucking); put it in quotes ("ass") to match it only on its own.')}
+        </div>
         <select
           value={current}
           onChange={(e) => setChannel(e.target.value)}
