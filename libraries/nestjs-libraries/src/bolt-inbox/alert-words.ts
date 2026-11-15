@@ -72,3 +72,25 @@ export function alertMatcher(words: string[]) {
     return tests.filter((t) => t.re.test(text)).map((t) => t.w);
   };
 }
+
+/**
+ * Where the alert words sit in a text, for highlighting: [start, end) pairs,
+ * in order, not overlapping. A match runs on to the end of the word, so
+ * "fucking" is marked whole, not just "fuck".
+ */
+export function alertRanges(entries: string[], text: string): Array<[number, number]> {
+  const found: Array<[number, number]> = [];
+  for (const entry of entries) {
+    if (!/^"?[a-z0-9]{2,30}"?$/.test(entry)) continue;
+    const re = new RegExp(`${pattern(entry)}[a-z0-9*#@$%!]*`, 'gi');
+    for (const m of text.matchAll(re)) found.push([m.index!, m.index! + m[0].length]);
+  }
+  found.sort((a, b) => a[0] - b[0]);
+  const out: Array<[number, number]> = [];
+  for (const r of found) {
+    const last = out[out.length - 1];
+    if (last && r[0] <= last[1]) last[1] = Math.max(last[1], r[1]);
+    else out.push([...r]);
+  }
+  return out;
+}

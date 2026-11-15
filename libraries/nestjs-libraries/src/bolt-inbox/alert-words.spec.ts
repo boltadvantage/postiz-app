@@ -1,4 +1,4 @@
-import { alertMatcher, cleanWords } from './alert-words';
+import { alertMatcher, alertRanges, cleanWords } from './alert-words';
 
 describe('alert words', () => {
   it('keeps plain words, lowercased, without repeats', () => {
@@ -31,5 +31,13 @@ describe('alert words', () => {
     expect(hit('what an a$$!')).toEqual(['"ass"']);
     expect(hit('Go to hell.')).toEqual(['"hell"']);
     expect(hit('Hello, can you assist? Asses')).toEqual([]);
+  });
+});
+
+describe('alert highlights', () => {
+  it('marks each hit to the end of its word', () => {
+    const text = 'Why the f**king MAGA dumba**es, go to hell';
+    const marks = alertRanges(['fuck', 'dumbass', '"hell"'], text).map(([a, b]) => text.slice(a, b));
+    expect(marks).toEqual(['f**king', 'dumba**es', 'hell']);
   });
 });
