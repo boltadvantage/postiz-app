@@ -2,7 +2,7 @@ import { alertMatcher, cleanWords } from './alert-words';
 
 describe('alert words', () => {
   it('keeps plain words, lowercased, without repeats', () => {
-    expect(cleanWords('Fuck, idiot  fuck,a, f-word')).toEqual(['fuck', 'fword', 'idiot']);
+    expect(cleanWords('Fuck, idiot  fuck,a, fword')).toEqual(['fuck', 'fword', 'idiot']);
     expect(cleanWords(['Idiot', 42, null])).toEqual(['42', 'idiot']);
     expect(cleanWords(undefined)).toEqual([]);
   });
@@ -22,5 +22,14 @@ describe('alert words', () => {
     expect(hit('if u can keep it')).toEqual([]);
     expect(hit('')).toEqual([]);
     expect(alertMatcher([])('fuck')).toEqual([]);
+  });
+
+  it('matches a quoted word only on its own', () => {
+    expect(cleanWords('"ass", \u201chell\u201d, f**k, sh!t, idiot!')).toEqual(['"ass"', '"hell"', 'idiot']);
+    const hit = alertMatcher(cleanWords('"ass", "hell"'));
+    expect(hit('kiss my ass')).toEqual(['"ass"']);
+    expect(hit('what an a$$!')).toEqual(['"ass"']);
+    expect(hit('Go to hell.')).toEqual(['"hell"']);
+    expect(hit('Hello, can you assist? Asses')).toEqual([]);
   });
 });
