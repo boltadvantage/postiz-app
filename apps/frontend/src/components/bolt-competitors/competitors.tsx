@@ -22,7 +22,8 @@ type Competitor = {
   handle: string;
   name: string | null;
   picture: string | null;
-  customerId: string | null;
+  /** every client watching this account; none = the workspace in general */
+  clients?: Array<{ id: string; name: string }>;
   lastCheckAt: string | null;
   lastError: string | null;
   followers: number | null;
@@ -66,7 +67,7 @@ const sortValue = (r: { name: string; growth: Growth }, key: SortKey) =>
 
 const input = 'bg-newBgColorInner h-[36px] border-newTableBorder border rounded-[8px] px-[10px] text-[14px] text-textColor outline-none';
 
-const CompetitorCard: FC<{ c: Competitor; isAdmin: boolean; refresh: () => void }> = ({ c, isAdmin, refresh }) => {
+const CompetitorCard: FC<{ c: Competitor; isAdmin: boolean; refresh: () => void; client?: { id: string; name: string } | null }> = ({ c, isAdmin, refresh, client }) => {
   const t = useT();
   const fetch = useFetch();
   const toaster = useToaster();
@@ -102,6 +103,15 @@ const CompetitorCard: FC<{ c: Competitor; isAdmin: boolean; refresh: () => void 
           </div>
         </div>
       </div>
+      {!!c.clients?.length && (
+        <div className="flex flex-wrap gap-[6px] text-[11px]">
+          {c.clients.map((cl) => (
+            <span key={cl.id} className={clsx('rounded-full px-[8px] h-[20px] flex items-center', cl.id === client?.id ? 'bg-[#612BD3] text-white' : 'bg-[#612BD3]/30')}>
+              {cl.name}
+            </span>
+          ))}
+        </div>
+      )}
       {c.lastError && <div className="text-[12px] text-amber-400">{c.lastError}</div>}
       <div className="flex flex-wrap gap-[6px] text-[12px]">
         <button type="button" onClick={() => setOpen(!open)} className="px-[10px] h-[28px] rounded-[6px] border border-newTableBorder">
@@ -115,10 +125,15 @@ const CompetitorCard: FC<{ c: Competitor; isAdmin: boolean; refresh: () => void 
             <button
               type="button"
               disabled={busy}
-              onClick={() => window.confirm(t('remove_competitor_confirm', 'Stop tracking this account? Its saved history is kept.')) && call(`/bolt-competitors/${c.id}`, 'DELETE')}
+              onClick={() =>
+                client && (c.clients?.length || 0) > 1
+                  ? window.confirm(t('remove_competitor_client_confirm', 'Stop watching this account for {{name}}? It stays tracked for the other clients.', { name: client.name, interpolation: { escapeValue: false } })) &&
+                    call(`/bolt-competitors/${c.id}?customerId=${client.id}`, 'DELETE')
+                  : window.confirm(t('remove_competitor_confirm', 'Stop tracking this account? Its saved history is kept.')) && call(`/bolt-competitors/${c.id}`, 'DELETE')
+              }
               className="ms-auto px-[10px] h-[28px] rounded-[6px] hover:bg-newBgColorInner text-red-400"
             >
-              {t('remove', 'Remove')}
+              {client && (c.clients?.length || 0) > 1 ? t('remove_from_client', 'Remove from {{name}}', { name: client.name, interpolation: { escapeValue: false } }) : t('remove', 'Remove')}
             </button>
           </>
         )}
@@ -192,7 +207,10 @@ export const Competitors = () => {
     setAdding(false);
     const body = await res.json().catch(() => ({}));
     if (!res.ok) return toaster.show(body?.message || t('could_not_add', 'Could not add'), 'warning');
-    toaster.show(body?.lastError ? body.lastError : t('competitor_added', 'Added'), body?.lastError ? 'warning' : 'success');
+    toaster.show(
+      body?.lastError ? body.lastError : body?.shared ? t('competitor_shared', 'Already tracked for another client: added to this one too, with its history') : t('competitor_added', 'Added'),
+      body?.lastError ? 'warning' : 'success'
+    );
     setHandle('');
     mutate();
   };
@@ -360,7 +378,7 @@ export const Competitors = () => {
           </div>
           <div className="grid grid-cols-2 mobile:grid-cols-1 gap-[12px]">
             {data.competitors.filter((c) => !only || family(c.platform) === only).map((c) => (
-              <CompetitorCard key={c.id} c={c} isAdmin={isAdmin} refresh={() => mutate()} />
+              <CompetitorCard key={c.id} c={c} isAdmin={isAdmin} refresh={() => mutate()} client={clients.find((x) => x.id === client) || null} />
             ))}
           </div>
         </>

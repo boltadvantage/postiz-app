@@ -1,4 +1,4 @@
-import { growth, isDue } from './competitors.service';
+import { duplicateGroups, growth, isDue } from './competitors.service';
 import { cleanHandle, nostrPubkey, parseDiscovery, parsePrimalFeed, parsePrimalProfile } from './sources';
 
 const PK = 'a'.repeat(64);
@@ -74,5 +74,34 @@ describe('competitor schedule', () => {
     expect(isDue(ago(22), 1, now)).toBe(false);
     expect(isDue(ago(6 * 24), 7, now)).toBe(false);
     expect(isDue(ago(7 * 24 - 1), 7, now)).toBe(true);
+  });
+});
+
+describe('one row per tracked account', () => {
+  const row = (id: string, handle: string, externalId: string | null, at: number, platform = 'x', org = 'o1') => ({
+    id,
+    organizationId: org,
+    platform,
+    handle,
+    externalId,
+    createdAt: new Date(at),
+  });
+
+  it('folds the same account tracked for two clients into the oldest', () => {
+    const groups = duplicateGroups([row('b', 'EricSchmidt', '42', 2000), row('a', 'ericschmidt', '42', 1000), row('c', 'someoneelse', '7', 3000)]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].keep.id).toBe('a');
+    expect(groups[0].fold.map((f) => f.id)).toEqual(['b']);
+  });
+
+  it('matches by platform id when the handles were typed differently', () => {
+    const groups = duplicateGroups([row('a', 'npub1abc', 'hex1', 1000, 'nostr'), row('b', 'eric@example.com', 'hex1', 2000, 'nostr'), row('c', 'eric@example.com', null, 3000, 'nostr')]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].keep.id).toBe('a');
+    expect(groups[0].fold.map((f) => f.id).sort()).toEqual(['b', 'c']);
+  });
+
+  it('keeps different platforms and workspaces apart', () => {
+    expect(duplicateGroups([row('a', 'eric', '1', 1000, 'x'), row('b', 'eric', '1', 2000, 'instagram'), row('c', 'eric', '1', 3000, 'x', 'o2')])).toEqual([]);
   });
 });
