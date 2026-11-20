@@ -4,8 +4,7 @@
 // was; Postiz then exports it and keeps the image. Canva's API can't search
 // its stock library from outside the editor, so that part always happens in
 // Canva itself.
-import { createHash, createPublicKey, randomBytes } from 'crypto';
-import { decode, verify } from 'jsonwebtoken';
+import { constants, createHash, createPublicKey, randomBytes, verify as verifySignature } from 'crypto';
 
 const API = 'https://api.canva.com/rest/v1';
 export const CANVA_AUTHORIZE = 'https://www.canva.com/api/oauth/authorize';
@@ -152,12 +151,52 @@ async function canvaKey(kid: string) {
   return createPublicKey({ key: jwk, format: 'jwk' });
 }
 
+/**
+ * How to check each signature type Canva may use. Only public-key types:
+ * shared-secret (HS*) and "none" are refused, so a forged note can't pass.
+ */
+const ALGS: Record<string, { hash: string | null; pss?: boolean; ec?: boolean }> = {
+  RS256: { hash: 'sha256' },
+  RS384: { hash: 'sha384' },
+  RS512: { hash: 'sha512' },
+  PS256: { hash: 'sha256', pss: true },
+  PS384: { hash: 'sha384', pss: true },
+  PS512: { hash: 'sha512', pss: true },
+  ES256: { hash: 'sha256', ec: true },
+  ES384: { hash: 'sha384', ec: true },
+  ES512: { hash: 'sha512', ec: true },
+  EdDSA: { hash: null },
+};
+
 /** Canva's return link → which design, and our note. Signed by Canva for our app only. */
 export async function readReturnToken(token: string) {
-  const decoded = decode(token, { complete: true });
-  const kid = decoded && typeof decoded === 'object' ? (decoded.header as any)?.kid : undefined;
-  if (!kid) throw new Error('Not a Canva return link');
-  const claims = verify(token, await canvaKey(kid), { audience: process.env.CANVA_CLIENT_ID, algorithms: ['RS256'] }) as any;
+  const parts = String(token).split('.');
+  if (parts.length !== 3) throw new Error('Not a Canva return link');
+  let header: any, claims: any;
+  try {
+    header = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
+    claims = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+  } catch {
+    throw new Error('Not a Canva return link');
+  }
+  const alg = ALGS[header?.alg];
+  if (!alg) throw new Error(`Canva return link uses an unsupported signature (${String(header?.alg).slice(0, 20)})`);
+  if (!header?.kid) throw new Error('Not a Canva return link');
+  const key = await canvaKey(String(header.kid));
+  const ok = verifySignature(
+    alg.hash,
+    Buffer.from(`${parts[0]}.${parts[1]}`),
+    {
+      key,
+      ...(alg.pss ? { padding: constants.RSA_PKCS1_PSS_PADDING, saltLength: constants.RSA_PSS_SALTLEN_DIGEST } : {}),
+      ...(alg.ec ? { dsaEncoding: 'ieee-p1363' as const } : {}),
+    },
+    Buffer.from(parts[2], 'base64url')
+  );
+  if (!ok) throw new Error('Canva return link signature does not check out');
+  const aud = Array.isArray(claims?.aud) ? claims.aud : [claims?.aud];
+  if (!process.env.CANVA_CLIENT_ID || !aud.includes(process.env.CANVA_CLIENT_ID)) throw new Error('Canva return link is for another app');
+  if (claims?.exp && Date.now() / 1000 > Number(claims.exp) + 60) throw new Error('Canva return link has expired; use My designs to bring it in');
   if (!claims?.design_id) throw new Error('Canva did not say which design');
   return { designId: String(claims.design_id), state: claims.correlation_state ? String(claims.correlation_state) : null };
 }
