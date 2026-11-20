@@ -49,9 +49,10 @@ export class BoltCompetitorsController {
     return wrap(() => this._competitors.checkNow(org.id, id));
   }
 
+  /** With ?customerId: stop watching it for that client only. Without: stop tracking it. */
   @Delete('/:id')
-  remove(@GetOrgFromRequest() org: Organization, @Param('id') id: string) {
+  remove(@GetOrgFromRequest() org: Organization, @Param('id') id: string, @Query('customerId') customerId?: string) {
     requireOrgAdmin(org);
-    return wrap(() => this._competitors.remove(org.id, id));
+    return wrap(() => this._competitors.remove(org.id, id, customerId || null));
   }
 }

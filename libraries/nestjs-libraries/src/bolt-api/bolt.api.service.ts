@@ -144,7 +144,7 @@ export class BoltApiService {
         platform: c.platform,
         handle: c.handle,
         name: c.name,
-        clientId: c.customerId,
+        clients: c.clients,
         followers: c.followers,
         growth: c.growth,
         lastCheckAt: iso(c.lastCheckAt),

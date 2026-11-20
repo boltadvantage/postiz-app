@@ -206,7 +206,7 @@ model AnalyticsChannelDaily {
 model Competitor {
   id             String    @id @default(cuid())
   organizationId String
-  /// Postiz customer (client) it's tracked for; null = everyone
+  /// old: the one client it was tracked for. Now moved into CompetitorClient (an account is tracked once, for any number of clients)
   customerId     String?
   platform       String
   /// what the user typed (@handle, username, npub or name@domain)
@@ -221,6 +221,16 @@ model Competitor {
   deletedAt      DateTime?
 
   @@index([organizationId])
+}
+
+/// Bolt Advantage: which clients a competitor is watched for. None = the workspace in general.
+model CompetitorClient {
+  competitorId String
+  customerId   String
+  createdAt    DateTime @default(now())
+
+  @@id([competitorId, customerId])
+  @@index([customerId])
 }
 
 /// Bolt Advantage: a competitor's follower count, once a day.
