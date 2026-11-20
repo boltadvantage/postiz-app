@@ -8,6 +8,7 @@ import { BoltAnalyticsController } from '@gitroom/backend/api/routes/bolt-analyt
 import { BoltCostsController } from '@gitroom/backend/api/routes/bolt-costs.controller';
 import { BoltChannelsController } from '@gitroom/backend/api/routes/bolt-channels.controller';
 import { BoltNotifyController } from '@gitroom/backend/api/routes/bolt-notify.controller';
+import { BoltCanvaController } from '@gitroom/backend/api/routes/bolt-canva.controller';
 import { BoltCompetitorsController } from '@gitroom/backend/api/routes/bolt-competitors.controller';
 import { QueueController } from '@gitroom/backend/api/routes/queue.controller';
 import { InboxController } from '@gitroom/backend/api/routes/inbox.controller';
@@ -75,6 +76,7 @@ const authenticatedController = [
   BoltCostsController,
   BoltChannelsController,
   BoltNotifyController,
+  BoltCanvaController,
   BoltCompetitorsController,
   QueueController,
   InboxController,

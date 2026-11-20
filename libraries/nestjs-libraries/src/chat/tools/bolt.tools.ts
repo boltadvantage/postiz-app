@@ -460,6 +460,78 @@ Costs are estimates; the X developer console has the real bill. "trackingSince" 
   }
 }
 
+@Injectable()
+export class BoltCanvaDesignsTool implements AgentToolInterface {
+  constructor(private _api: BoltApiService) {}
+  name = 'boltCanvaDesignsTool';
+  optionalOnSelfHosted = true;
+  run() {
+    return createTool({
+      id: 'boltCanvaDesignsTool',
+      mcp: read('List or Search Canva Designs'),
+      description: `
+The user's own Canva designs (newest first, or matching "query"), with id, title, page count and a thumbnail. Use an id with boltCanvaImportTool to bring a design into Postiz as post images.
+Canva's stock photo library can't be searched from here: stock photos are picked inside the Canva editor (see boltCanvaNewDesignTool). Fails with "Connect Canva first" until the user connects Canva in the post editor.
+`,
+      inputSchema: z.object({
+        query: z.string().max(255).optional().describe('Search words; leave out for the newest designs'),
+        continuation: z.string().optional().describe('From a previous answer, for the next page'),
+      }),
+      outputSchema,
+      execute: async (input, context) => run(() => this._api.canvaDesigns(orgId(input, context), input.query, input.continuation)),
+    });
+  }
+}
+
+@Injectable()
+export class BoltCanvaImportTool implements AgentToolInterface {
+  constructor(private _api: BoltApiService) {}
+  name = 'boltCanvaImportTool';
+  optionalOnSelfHosted = true;
+  run() {
+    return createTool({
+      id: 'boltCanvaImportTool',
+      mcp: write('Bring a Canva Design into Postiz', false),
+      description: `
+Export a Canva design (id from boltCanvaDesignsTool) and save its pages in the Postiz media library. Returns media [{ id, path, name }] - put them in a post's image list (each one is { id, path }) when creating or editing a post.
+All pages by default (up to 10, one image each, in order - good for carousels), or only "pages" (1-based). JPG by default; PNG on request.
+`,
+      inputSchema: z.object({
+        designId: z.string(),
+        pages: z.array(z.number().int().min(1)).max(10).optional(),
+        format: z.enum(['jpg', 'png']).optional(),
+      }),
+      outputSchema,
+      execute: async (input, context) => run(() => this._api.canvaImport(orgId(input, context), input.designId, { pages: input.pages, format: input.format })),
+    });
+  }
+}
+
+@Injectable()
+export class BoltCanvaNewDesignTool implements AgentToolInterface {
+  constructor(private _api: BoltApiService) {}
+  name = 'boltCanvaNewDesignTool';
+  optionalOnSelfHosted = true;
+  run() {
+    return createTool({
+      id: 'boltCanvaNewDesignTool',
+      mcp: write('Start a Canva Design', true),
+      description: `
+Create a blank Canva design at a social size and get its editUrl for a person to open: they pick stock photos and design in Canva, then Canva's return button brings the finished image into the Postiz media library.
+Sizes: "square" 1080x1080, "portrait" 1080x1350, "story" 1080x1920, "landscape" 1200x675, or exact width and height (40-8000 px). The design can also be imported later with boltCanvaImportTool using the returned designId.
+`,
+      inputSchema: z.object({
+        size: z.enum(['square', 'portrait', 'story', 'landscape']).optional(),
+        width: z.number().int().min(40).max(8000).optional(),
+        height: z.number().int().min(40).max(8000).optional(),
+        title: z.string().max(255).optional(),
+      }),
+      outputSchema,
+      execute: async (input, context) => run(() => this._api.canvaNewDesign(orgId(input, context), input)),
+    });
+  }
+}
+
 export const boltTools = [
   BoltInboxListTool,
   BoltInboxRespondTool,
@@ -477,4 +549,7 @@ export const boltTools = [
   BoltPostingPauseTool,
   BoltAnalyticsTool,
   BoltCostsTool,
+  BoltCanvaDesignsTool,
+  BoltCanvaImportTool,
+  BoltCanvaNewDesignTool,
 ];

@@ -11,6 +11,7 @@ import { PauseService } from '@gitroom/nestjs-libraries/bolt-queue/pause.service
 import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
 import { BoltAnalyticsQueries } from '@gitroom/nestjs-libraries/bolt-analytics/bolt-analytics.queries';
 import { CostsService } from '@gitroom/nestjs-libraries/bolt-costs/costs.service';
+import { CanvaService } from '@gitroom/nestjs-libraries/bolt-canva/canva.service';
 
 export type BoltStatus = 'open' | 'unread' | 'archived' | 'all';
 const STATUSES: BoltStatus[] = ['open', 'unread', 'archived', 'all'];
@@ -47,8 +48,31 @@ export class BoltApiService {
     private _analytics: BoltAnalyticsQueries,
     private _costs: CostsService,
     private _follows: FollowsService,
-    private _competitors: CompetitorsService
+    private _competitors: CompetitorsService,
+    private _canva: CanvaService
   ) {}
+
+  // ---------- Canva ----------
+
+  /** Whether Canva is connected, and the sizes a new design can start at. */
+  canvaStatus(orgId: string) {
+    return this._canva.status(orgId);
+  }
+
+  /** The user's Canva designs, newest first or matching a search. */
+  canvaDesigns(orgId: string, query?: string, continuation?: string) {
+    return this._canva.designs(orgId, query, continuation);
+  }
+
+  /** Bring a Canva design's pages into the media library; the returned media go straight into a post's image list. */
+  async canvaImport(orgId: string, designId: string, opts: { pages?: number[]; format?: 'jpg' | 'png' }) {
+    return { media: await this._canva.importDesign(orgId, designId, opts) };
+  }
+
+  /** Start a blank design at a social size; a person finishes it in Canva via editUrl. */
+  canvaNewDesign(orgId: string, input: { size?: string; width?: number; height?: number; title?: string }) {
+    return this._canva.newDesign(orgId, input);
+  }
 
   // ---------- client costs ----------
 
