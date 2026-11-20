@@ -1,4 +1,4 @@
-import { createHash, generateKeyPairSync } from 'crypto';
+import { createHash, generateKeyPairSync, sign as edSign } from 'crypto';
 import { sign } from 'jsonwebtoken';
 import { authorizeUrl, CanvaApi, editLink, pkce, readReturnToken } from './canva';
 
@@ -24,17 +24,41 @@ describe('Canva', () => {
     expect(link.searchParams.get('correlation_state')).toBe('st123');
   });
 
+  const keysFor = (pub: any, kid: string, alg: string) => {
+    (global as any).fetch = jest.fn(async () => ({ ok: true, json: async () => ({ keys: [{ ...(pub.export({ format: 'jwk' }) as any), kid, alg, use: 'sig' }] }) }));
+  };
+
   it('trusts a return link only when Canva signed it for our app', async () => {
     const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
-    const jwk = { ...(publicKey.export({ format: 'jwk' }) as any), kid: 'k1', alg: 'RS256', use: 'sig' };
-    (global as any).fetch = jest.fn(async () => ({ ok: true, json: async () => ({ keys: [jwk] }) }));
+    keysFor(publicKey, 'k1', 'RS256');
     const good = sign({ design_id: 'D1', correlation_state: 'st123' }, privateKey, { algorithm: 'RS256', keyid: 'k1', audience: 'client-1', expiresIn: 60 });
     await expect(readReturnToken(good)).resolves.toEqual({ designId: 'D1', state: 'st123' });
     const otherApp = sign({ design_id: 'D1' }, privateKey, { algorithm: 'RS256', keyid: 'k1', audience: 'someone-else', expiresIn: 60 });
-    await expect(readReturnToken(otherApp)).rejects.toThrow();
+    await expect(readReturnToken(otherApp)).rejects.toThrow('another app');
     const { privateKey: forger } = generateKeyPairSync('rsa', { modulusLength: 2048 });
     const forged = sign({ design_id: 'D1' }, forger, { algorithm: 'RS256', keyid: 'k1', audience: 'client-1', expiresIn: 60 });
-    await expect(readReturnToken(forged)).rejects.toThrow();
+    await expect(readReturnToken(forged)).rejects.toThrow('does not check out');
+    const shared = sign({ design_id: 'D1' }, 'secret', { algorithm: 'HS256', keyid: 'k1', audience: 'client-1' });
+    await expect(readReturnToken(shared)).rejects.toThrow('unsupported');
+  });
+
+  it('accepts the other public-key signature types', async () => {
+    const ec = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    keysFor(ec.publicKey, 'e1', 'ES256');
+    const es = sign({ design_id: 'D2' }, ec.privateKey, { algorithm: 'ES256', keyid: 'e1', audience: 'client-1', expiresIn: 60 });
+    await expect(readReturnToken(es)).resolves.toMatchObject({ designId: 'D2' });
+
+    const rsa = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    keysFor(rsa.publicKey, 'p1', 'PS256');
+    const ps = sign({ design_id: 'D3' }, rsa.privateKey, { algorithm: 'PS256', keyid: 'p1', audience: 'client-1', expiresIn: 60 });
+    await expect(readReturnToken(ps)).resolves.toMatchObject({ designId: 'D3' });
+
+    const ed = generateKeyPairSync('ed25519');
+    keysFor(ed.publicKey, 'd1', 'EdDSA');
+    const head = Buffer.from(JSON.stringify({ alg: 'EdDSA', kid: 'd1', typ: 'JWT' })).toString('base64url');
+    const body = Buffer.from(JSON.stringify({ design_id: 'D4', aud: 'client-1', exp: Math.floor(Date.now() / 1000) + 60 })).toString('base64url');
+    const sig = edSign(null, Buffer.from(`${head}.${body}`), ed.privateKey).toString('base64url');
+    await expect(readReturnToken(`${head}.${body}.${sig}`)).resolves.toMatchObject({ designId: 'D4' });
   });
 
   it('exports and waits for the files', async () => {
