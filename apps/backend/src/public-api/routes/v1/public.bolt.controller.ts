@@ -173,4 +173,28 @@ export class PublicBoltController {
   ) {
     return this._api.analytics(org.id, { days: Number(days) || undefined, integrationId, timeZone, include: list(include) });
   }
+
+  // ---------- Canva ----------
+
+  @Get('/canva')
+  canvaStatus(@GetOrgFromRequest() org: Organization) {
+    return this._api.canvaStatus(org.id);
+  }
+
+  @Get('/canva/designs')
+  canvaDesigns(@GetOrgFromRequest() org: Organization, @Query('q') q?: string, @Query('continuation') continuation?: string) {
+    return wrap(() => this._api.canvaDesigns(org.id, q || undefined, continuation || undefined));
+  }
+
+  @Post('/canva/designs')
+  canvaNewDesign(@GetOrgFromRequest() org: Organization, @Body() body: { size?: string; width?: number; height?: number; title?: string }) {
+    return wrap(() => this._api.canvaNewDesign(org.id, body || {}));
+  }
+
+  @Post('/canva/import')
+  canvaImport(@GetOrgFromRequest() org: Organization, @Body() body: { designId?: string; pages?: number[]; format?: 'jpg' | 'png' }) {
+    if (!body?.designId) throw new HttpException('designId is required', 400);
+    const pages = Array.isArray(body.pages) ? body.pages.map(Number).filter((n) => Number.isFinite(n)) : undefined;
+    return wrap(() => this._api.canvaImport(org.id, String(body.designId), { pages, format: body.format }));
+  }
 }

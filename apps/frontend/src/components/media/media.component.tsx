@@ -23,16 +23,14 @@ import { useToaster } from '@gitroom/react/toaster/toaster';
 import clsx from 'clsx';
 import { VideoFrame } from '@gitroom/react/helpers/video.frame';
 import { useUppyUploader } from '@gitroom/frontend/components/media/new.uploader';
-import dynamic from 'next/dynamic';
 import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { AiImage } from '@gitroom/frontend/components/launches/ai.image';
 import { DropFiles } from '@gitroom/frontend/components/layout/drop.files';
 import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { ThirdPartyMedia } from '@gitroom/frontend/components/third-parties/third-party.media';
 import { ReactSortable } from 'react-sortablejs';
 import { MediaComponentInner } from '@gitroom/frontend/components/launches/helpers/media.settings.component';
-import { AiVideo } from '@gitroom/frontend/components/launches/ai.video';
+import { CanvaButton } from '@gitroom/frontend/components/bolt-canva/canva.button';
 import { useModals } from '@gitroom/frontend/components/layout/new-modal';
 import { ThirdPartyMediaLibrary } from '@gitroom/frontend/components/third-parties/third-party.media-library';
 import { Dashboard } from '@uppy/react';
@@ -45,7 +43,6 @@ import {
   DragHandleIcon,
   MediaSettingsIcon,
   InsertMediaIcon,
-  DesignMediaIcon,
   VerticalDividerIcon,
   NoMediaIcon,
   TrashIcon,
@@ -54,9 +51,7 @@ import { useLaunchStore } from '@gitroom/frontend/components/new-launch/store';
 import { useShallow } from 'zustand/react/shallow';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
 import { useDebounce } from 'use-debounce';
-const Polonto = dynamic(
-  () => import('@gitroom/frontend/components/launches/polonto')
-);
+// Bolt Advantage: Canva replaces Postiz's built-in design editor and AI image/video tools
 const showModalEmitter = new EventEmitter();
 // on phones the media library takes the whole screen
 export const mediaLibrarySize = () =>
@@ -862,19 +857,6 @@ export const MultiMediaComponent: FC<{
     [currentMedia]
   );
 
-  const designMedia = useCallback(() => {
-    if (!!user?.tier?.ai && !dummy) {
-      modals.openModal({
-        askClose: false,
-        title: t('design_media', 'Design Media'),
-        size: '80%',
-        children: (close) => (
-          <Polonto setMedia={changeMedia} closeModal={close} />
-        ),
-      });
-    }
-  }, [changeMedia, t]);
-
   return (
     <>
       <div className="b1 flex flex-col gap-[8px] mobile:gap-[16px] rounded-bl-[8px] select-none w-full">
@@ -974,32 +956,12 @@ export const MultiMediaComponent: FC<{
                     </div>
                   </div>
                 </div>
-                <div
-                  onClick={designMedia}
-                  className="cursor-pointer h-[30px] rounded-[6px] justify-center items-center flex bg-newColColor px-[8px] mobile:hidden"
-                >
-                  <div className="flex gap-[5px] items-center">
-                    <div>
-                      <DesignMediaIcon />
-                    </div>
-                    <div className="text-[10px] font-[600] iconBreak:hidden block">
-                      {t('design_media', 'Design Media')}
-                    </div>
-                  </div>
-                </div>
+                <CanvaButton onChange={changeMedia} />
 
                 {!insertInContent && (
                   <ThirdPartyMedia allData={allData} onChange={changeMedia} />
                 )}
 
-                {!!user?.tier?.ai && (
-                  <>
-                    <AiImage value={text} onChange={changeMedia} />
-                    {!insertInContent && (
-                      <AiVideo value={text} onChange={changeMedia} />
-                    )}
-                  </>
-                )}
               </div>
             )}
             {!mediaNotAvailable && (
@@ -1070,24 +1032,6 @@ export const MediaComponent: FC<{
   const modals = useModals();
   const mediaDirectory = useMediaDirectory();
 
-  const showDesignModal = useCallback(() => {
-    modals.openModal({
-      title: t('media_editor', 'Media Editor'),
-      askClose: false,
-      closeOnEscape: true,
-      fullScreen: true,
-      size: 'calc(100% - 80px)',
-      height: 'calc(100% - 80px)',
-      children: (close) => (
-        <Polonto
-          width={width}
-          height={height}
-          setMedia={changeMedia}
-          closeModal={close}
-        />
-      ),
-    });
-  }, [t]);
   const changeMedia = useCallback((m: { path: string; id: string }[]) => {
     setCurrentMedia(m[0]);
     onChange({
@@ -1134,12 +1078,7 @@ export const MediaComponent: FC<{
       )}
       <div className="flex gap-[5px]">
         <Button onClick={showModal}>{t('select', 'Select')}</Button>
-        <Button
-          onClick={showDesignModal}
-          className="!bg-customColor45 mobile:hidden"
-        >
-          {t('editor', 'Editor')}
-        </Button>
+        <CanvaButton onChange={(m) => changeMedia(m.slice(0, 1))} />
         <Button secondary={true} onClick={clearMedia}>
           {t('clear', 'Clear')}
         </Button>
