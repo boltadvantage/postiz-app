@@ -332,9 +332,13 @@ export class PostsRepository {
       ],
       ...stateAndDate,
       // Published posts were already posted (publishDate in the past), so fetch
-      // all of them; everything else stays upcoming. Ordering handles the rest.
-      ...(stateFilter === 'published'
+      // all of them; scheduled ones stay upcoming. Bolt: drafts always show,
+      // whatever their date — a draft whose time has passed still needs work
+      // (and the calendar still shows it). Ordering handles the rest.
+      ...(stateFilter === 'published' || stateFilter === 'draft'
         ? {}
+        : stateFilter === 'all'
+        ? { OR: [{ state: State.DRAFT }, { publishDate: { gte: dayjs.utc().toDate() } }] }
         : { publishDate: { gte: dayjs.utc().toDate() } }),
       deletedAt: null as Date | null,
       parentPostId: null as string | null,
