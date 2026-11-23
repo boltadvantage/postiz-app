@@ -55,6 +55,11 @@ const MentionList: FC = (props: any) => {
 
   useImperativeHandle(props.ref, () => ({
     onKeyDown: ({ event }: { event: any }) => {
+      // Bolt: with nothing to pick (no results, still loading, or hidden),
+      // keys go to the editor, so Enter still makes a new line.
+      if (props?.stop || props?.loading || !Array.isArray(props?.items) || !props.items.length) {
+        return false;
+      }
       if (event.key === 'ArrowUp') {
         upHandler();
         return true;
@@ -157,7 +162,9 @@ export const suggestion = (
   return {
     allowSpaces: true,
     items: async ({ query }: { query: string }) => {
-      if (!query || query.length < 2) {
+      // Bolt: names can have a space or two ("Eric Burlison"), but a long run
+      // of words after an @ is ordinary text, not someone to look up.
+      if (!query || query.length < 2 || query.length > 40 || (query.match(/ /g) || []).length > 2) {
         component.updateProps({ loading: true, stop: true });
         return [];
       }
@@ -227,7 +234,8 @@ export const suggestion = (
             newQuery.length >= 2 &&
             (!props.items || props.items.length === 0);
 
-          component.updateProps({ ...props, loading: false, stop: false });
+          const tooLong = newQuery.length > 40 || (newQuery.match(/ /g) || []).length > 2;
+          component.updateProps({ ...props, loading: false, stop: tooLong });
 
           if (!props.clientRect) {
             return;
