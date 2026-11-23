@@ -126,6 +126,16 @@ export class PublicBoltController {
     return { people: await this._api.people(org.id, { muted: muted === undefined ? undefined : muted === 'true', tag }), tags: await this._api.tags(org.id) };
   }
 
+  /** Many people at once: { ids, addTags?, removeTags?, muted?, note?, noteMode?: "append" | "replace" }. */
+  @Put('/people')
+  peopleBulk(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: { ids?: string[]; addTags?: unknown; removeTags?: unknown; muted?: boolean; note?: string | null; noteMode?: 'append' | 'replace' }
+  ) {
+    if (!Array.isArray(body?.ids) || !body.ids.length) throw new HttpException('Send { ids: [...] }', 400);
+    return wrap(() => this._api.updatePeople(org.id, body.ids!, body));
+  }
+
   @Put('/people/:id')
   person(@GetOrgFromRequest() org: Organization, @Param('id') id: string, @Body() body: { tags?: unknown; muted?: boolean; note?: string | null }) {
     return wrap(() => this._api.updatePerson(org.id, id, body || {}));

@@ -10,7 +10,7 @@ import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
-import { Channel, Person, PersonPanel, SelectionBar, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
+import { Channel, Person, PersonPanel, SelectionBar, selectedPeople, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
 
 type Follow = {
   id: string;
@@ -181,6 +181,9 @@ export const Follows: FC<{
         busy={busy}
         onAll={(on) => setSelected(on ? data.items.map((f) => f.id) : [])}
         onAction={bulk}
+        people={selectedPeople(data.items, selected)}
+        allTags={allTags}
+        onPeopleSaved={refresh}
       />
       {data.items.map((f) => (
         <FollowRow

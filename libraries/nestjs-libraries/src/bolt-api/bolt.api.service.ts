@@ -262,6 +262,11 @@ export class BoltApiService {
     return (await this._inbox.people(orgId, f)).map(person);
   }
 
+  /** The same tag / mute / note change for many people. */
+  updatePeople(orgId: string, ids: string[], body: { addTags?: unknown; removeTags?: unknown; muted?: boolean; note?: string | null; noteMode?: 'append' | 'replace' }) {
+    return this._inbox.updatePeople(orgId, ids, body);
+  }
+
   async updatePerson(orgId: string, id: string, body: { tags?: unknown; muted?: boolean; note?: string | null }) {
     return person(await this._inbox.updatePerson(orgId, id, body));
   }

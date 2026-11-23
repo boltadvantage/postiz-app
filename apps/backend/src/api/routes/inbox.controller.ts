@@ -101,6 +101,16 @@ export class InboxController {
     return this._inbox.people(org.id, { muted: muted === undefined ? undefined : muted === 'true', tag });
   }
 
+  /** Many people at once: { ids, addTags?, removeTags?, muted?, note?, noteMode?: "append" | "replace" }. */
+  @Put('/people')
+  people_bulk(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: { ids?: string[]; addTags?: unknown; removeTags?: unknown; muted?: boolean; note?: string | null; noteMode?: 'append' | 'replace' }
+  ) {
+    if (!Array.isArray(body?.ids) || !body.ids.length) throw new HttpException('Send { ids: [...] }', 400);
+    return wrap(() => this._inbox.updatePeople(org.id, body.ids!, body));
+  }
+
   @Put('/people/:id')
   person(
     @GetOrgFromRequest() org: Organization,

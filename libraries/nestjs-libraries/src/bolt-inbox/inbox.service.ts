@@ -16,6 +16,7 @@ import { WebhookComment } from '@gitroom/nestjs-libraries/bolt-inbox/facebook.we
 import { IncomingInstagram, InstagramInbox } from '@gitroom/nestjs-libraries/bolt-inbox/instagram.inbox';
 import { switchChecker } from '@gitroom/nestjs-libraries/bolt-inbox/switches';
 import { alertMatcher, alertWords } from '@gitroom/nestjs-libraries/bolt-inbox/alert-words';
+import { personChange } from '@gitroom/nestjs-libraries/bolt-inbox/people';
 import { UsageKind } from '@gitroom/nestjs-libraries/bolt-costs/usage';
 import { chargeX, hasLink, worstItem, xBudgetLeft, xBudgetSettings, XPool, XResources } from '@gitroom/nestjs-libraries/bolt-costs/x-billing';
 
@@ -497,6 +498,24 @@ export class InboxService {
       },
     });
     return { ...updated, tags: parseTags(updated.tags) };
+  }
+
+  /**
+   * The same change for many people at once: add or remove tags (their other
+   * tags stay), mute or unmute, and add a note line or replace the note.
+   */
+  async updatePeople(
+    organizationId: string,
+    ids: string[],
+    body: { addTags?: unknown; removeTags?: unknown; muted?: boolean; note?: string | null; noteMode?: 'append' | 'replace' }
+  ) {
+    const people = await this._prisma.inboxPerson.findMany({ where: { organizationId, id: { in: ids.map(String).slice(0, 500) } } });
+    if (!people.length) throw new Error('Nobody selected');
+    for (const p of people) {
+      const data = personChange(p, body);
+      if (Object.keys(data).length) await this._prisma.inboxPerson.update({ where: { id: p.id }, data });
+    }
+    return { updated: people.length };
   }
 
   async mark(organizationId: string, ids: string[], action: 'read' | 'unread' | 'archive' | 'unarchive') {

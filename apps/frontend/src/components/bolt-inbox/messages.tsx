@@ -10,7 +10,7 @@ import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
-import { Channel as InboxChannel, Person as InboxPerson, PersonPanel, pretty, ProblemNote, SelectionBar, Status as InboxStatus } from '@gitroom/frontend/components/bolt-inbox/shared';
+import { Channel as InboxChannel, Person as InboxPerson, PersonPanel, pretty, ProblemNote, SelectionBar, selectedPeople, Status as InboxStatus } from '@gitroom/frontend/components/bolt-inbox/shared';
 import { ChannelAvatar } from '@gitroom/frontend/components/bolt-shared/channel.avatar';
 
 type Conversation = {
@@ -250,6 +250,9 @@ export const Messages: FC<{
                   busy={bulkBusy}
                   onAll={(on) => setSelected(on ? data.conversations.map((c) => c.id) : [])}
                   onAction={bulk}
+                  people={selectedPeople(data.conversations, selected)}
+                  allTags={allTags}
+                  onPeopleSaved={changed}
                 />
               </div>
               {data.conversations.map((c) => (
