@@ -11,6 +11,7 @@ import i18next from 'i18next';
 import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
 import { BottomSheet } from '@gitroom/frontend/components/ui/bottom.sheet.component';
 import { FilterIcon } from '@gitroom/frontend/components/ui/icons';
+import { DraftsShortcut } from '@gitroom/frontend/components/bolt-drafts/drafts.shortcut';
 
 // Helper function to get start and end dates based on display type
 function getDateRange(
@@ -157,6 +158,20 @@ export const Filters = () => {
       display: 'list',
       customer: calendar.customer,
     });
+  }, [calendar]);
+
+  // Bolt Advantage: the yellow Drafts button jumps to the list on the Draft filter
+  const openDrafts = useCallback(() => {
+    if (calendar.listState !== 'draft') calendar.setListState('draft');
+    if (calendar.display !== 'list') {
+      const range = getDateRange('list');
+      calendar.setFilters({
+        startDate: range.startDate,
+        endDate: range.endDate,
+        display: 'list',
+        customer: calendar.customer,
+      });
+    }
   }, [calendar]);
 
   const setCalendarView = useCallback(() => {
@@ -508,6 +523,11 @@ export const Filters = () => {
           {t('list', 'List')}
         </div>
       </div>
+      <DraftsShortcut
+        customer={calendar.customer as string | null}
+        active={isListView && calendar.listState === 'draft'}
+        onOpen={openDrafts}
+      />
       <div className="flex flex-row p-[4px] border border-newTableBorder rounded-[8px] text-[14px] font-[500] mobile:hidden">
         <div
           onClick={setCalendarView}
