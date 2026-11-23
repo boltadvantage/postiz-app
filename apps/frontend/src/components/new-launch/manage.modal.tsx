@@ -1362,7 +1362,11 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                 Save Set
               </button>
             )}
-            {!addEditSets && !dummy && !existingData?.integration && (
+            {/* Bolt: a new post, or a draft being finished, can go to the queue */}
+            {!addEditSets &&
+              !dummy &&
+              (!existingData?.integration ||
+                existingData?.posts?.[0]?.state === 'DRAFT') && (
               <button
                 disabled={
                   selectedIntegrations.length === 0 || loading || locked || queueLoading
