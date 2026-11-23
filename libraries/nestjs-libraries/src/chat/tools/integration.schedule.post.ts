@@ -5,6 +5,7 @@ import { Injectable } from '@nestjs/common';
 import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
 import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
 import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
+import { postBatches } from '@gitroom/nestjs-libraries/chat/tools/post.batches';
 import { AllProvidersSettings } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/all.providers.settings';
 import { Integration } from '@prisma/client';
 import { checkAuth } from '@gitroom/nestjs-libraries/chat/auth.context';
@@ -90,6 +91,7 @@ A single LinkedIn post with one comment
 - socialPost array length will be 20
 - postsAndComments array length will be one
 
+Channels sent in one call with the same date and type become ONE post with a variation per channel (one calendar entry, edited and deleted together), like a multi-channel post made in the editor: give each channel its own content and attachments (e.g. a longer text for Facebook and LinkedIn, the same image everywhere). Entries with different dates stay separate posts.
 Do not use this to update or delete existing posts.
 On success, each item in output contains a previewUrl the user can open to see the post.
 If validation fails, the result contains output.errors describing what to fix; the call can be retried with corrected parameters.
@@ -246,42 +248,46 @@ If validation fails, the result contains output.errors describing what to fix; t
           }
         }
 
-        for (const post of inputData.socialPost) {
-          const integration = integrations[post.integrationId];
-
-          if (!integration) {
-            throw new Error('Integration not found');
-          }
+        // Bolt Advantage: channels sent together for the same time and type
+        // are saved in one go, so they are one post with a variation per
+        // channel, like the editor makes (one calendar entry, edited and
+        // deleted together). Different times stay separate posts.
+        for (const bucket of postBatches(inputData.socialPost)) {
+          const channelPosts = bucket.map((post: any) => {
+            const integration = integrations[post.integrationId];
+            if (!integration) {
+              throw new Error('Integration not found');
+            }
+            return {
+              integration,
+              group: makeId(10),
+              settings: post.settings.reduce(
+                (acc: AllProvidersSettings, s: { key: string; value: any }) => ({
+                  ...acc,
+                  [s.key]: s.value,
+                }),
+                {
+                  __type: integration.providerIdentifier,
+                } as AllProvidersSettings
+              ),
+              value: post.postsAndComments.map((p: any) => ({
+                content: p.content,
+                id: makeId(10),
+                delay: 0,
+                image: p.attachments.map((a: any) => ({
+                  id: makeId(10),
+                  ...toMedia(a),
+                })),
+              })),
+            };
+          });
 
           const output = await this._postsService.createPost(organizationId, {
-            date: post.date,
-            type: post.type as 'draft' | 'schedule' | 'now',
-            shortLink: post.shortLink,
+            date: bucket[0].date,
+            type: bucket[0].type as 'draft' | 'schedule' | 'now',
+            shortLink: bucket.some((p: any) => p.shortLink),
             tags: [],
-            posts: [
-              {
-                integration,
-                group: makeId(10),
-                settings: post.settings.reduce(
-                  (acc: AllProvidersSettings, s: { key: string; value: any }) => ({
-                    ...acc,
-                    [s.key]: s.value,
-                  }),
-                  {
-                    __type: integration.providerIdentifier,
-                  } as AllProvidersSettings
-                ),
-                value: post.postsAndComments.map((p: any) => ({
-                  content: p.content,
-                  id: makeId(10),
-                  delay: 0,
-                  image: p.attachments.map((a: any) => ({
-                    id: makeId(10),
-                    ...toMedia(a),
-                  })),
-                })),
-              },
-            ],
+            posts: channelPosts,
           }, 'MCP');
           // Same public preview page the calendar "Preview Post" button opens.
           finalOutput.push(
