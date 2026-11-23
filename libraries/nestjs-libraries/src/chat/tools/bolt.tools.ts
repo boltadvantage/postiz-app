@@ -215,6 +215,34 @@ Mark inbox items (target "items", ids from boltInboxListTool), direct-message co
 }
 
 @Injectable()
+export class BoltInboxMarkMatchingTool implements AgentToolInterface {
+  constructor(private _api: BoltApiService) {}
+  name = 'boltInboxMarkMatchingTool';
+  optionalOnSelfHosted = true;
+  run() {
+    return createTool({
+      id: 'boltInboxMarkMatchingTool',
+      mcp: write('Mark / Archive / Delete Everything Matching Inbox Filters', true),
+      description: `
+"Select everything" for the inbox: mark read or unread, archive, unarchive, or delete every inbox item that matches the filters, on all pages at once (not only the 50 boltInboxListTool returns). Use the same filters as boltInboxListTool and check its "total" first so you know how many will change. With no filters it covers the whole open inbox, so only do that when the user clearly asked. Delete only removes items from the user's inbox, nothing on the social network, and cannot be undone.
+`,
+      inputSchema: z.object({
+        action: z.enum(['read', 'unread', 'archive', 'unarchive', 'delete']),
+        status: z.enum(['unread', 'open', 'archived', 'all']).optional().describe('Default open'),
+        channels: z.array(z.string()).optional().describe('Channel (integration) ids'),
+        kinds: z.array(z.enum(['mention', 'reply', 'quote'])).optional(),
+        tag: z.string().optional(),
+        q: z.string().optional().describe('Text search'),
+        showMuted: z.boolean().optional(),
+        hideUnnamed: z.boolean().optional().describe('Leave out Facebook comments whose writer is not known yet'),
+      }),
+      outputSchema,
+      execute: async (input, context) => run(() => this._api.markInboxMatching(orgId(input, context), input, input.action)),
+    });
+  }
+}
+
+@Injectable()
 export class BoltConversationsListTool implements AgentToolInterface {
   constructor(private _api: BoltApiService) {}
   name = 'boltConversationsListTool';
@@ -551,6 +579,7 @@ export const boltTools = [
   BoltInboxListTool,
   BoltInboxRespondTool,
   BoltInboxMarkTool,
+  BoltInboxMarkMatchingTool,
   BoltFollowsListTool,
   BoltFollowTool,
   BoltCompetitorsTool,

@@ -124,6 +124,29 @@ export class BoltApiService {
     return this._inbox.act(orgId, itemId, action as any, text);
   }
 
+  /** Mark, archive or delete everything the inbox filters match, every page at once. */
+  markInboxMatching(
+    orgId: string,
+    f: { status?: string; channels?: string[]; kinds?: string[]; tag?: string; q?: string; showMuted?: boolean; hideUnnamed?: boolean },
+    action: string
+  ) {
+    if (!['read', 'unread', 'archive', 'unarchive', 'delete'].includes(action)) throw new Error('action must be read, unread, archive, unarchive or delete');
+    return this._inbox.markMatching(
+      orgId,
+      {
+        status: status(f.status),
+        integrationIds: f.channels?.length ? f.channels : undefined,
+        kinds: f.kinds?.filter((k) => KINDS.includes(k)) as any,
+        tag: f.tag || undefined,
+        q: f.q ? String(f.q).slice(0, 200) : undefined,
+        showMuted: !!f.showMuted,
+        hideUnnamed: !!f.hideUnnamed,
+        upTo: new Date(),
+      },
+      action as any
+    );
+  }
+
   markInbox(orgId: string, ids: string[], action: string) {
     if (!['read', 'unread', 'archive', 'unarchive'].includes(action)) throw new Error('action must be read, unread, archive or unarchive');
     return this._inbox.mark(orgId, ids.map(String), action as any);

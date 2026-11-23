@@ -44,6 +44,8 @@ export type InboxFilters = {
   hideUnnamed?: boolean;
   q?: string;
   page?: number;
+  /** only items that reached the inbox by this time (so "all matching" doesn't sweep up newer ones) */
+  upTo?: Date;
 };
 
 const clip = (s: string | null | undefined, n: number) => (s ? s.slice(0, n) : null);
@@ -401,10 +403,8 @@ export class InboxService {
 
   // ---------- reading ----------
 
-  async list(organizationId: string, f: InboxFilters) {
-    const people = await this._prisma.inboxPerson.findMany({ where: { organizationId } });
-    const personKey = (platform: string, authorId: string) => `${platform}:${authorId}`;
-    const byKey = new Map(people.map((p) => [personKey(p.platform, p.authorId), { ...p, tags: parseTags(p.tags) }]));
+  /** The database filter for what the inbox shows with these filters. */
+  private whereFor(organizationId: string, f: InboxFilters, people: Array<{ platform: string; authorId: string; muted: boolean; tags: string | null }>) {
     const muted = people.filter((p) => p.muted);
     const tagged = f.tag ? people.filter((p) => parseTags(p.tags).includes(f.tag!.toLowerCase())) : null;
 
@@ -426,8 +426,17 @@ export class InboxService {
       ...(f.kinds?.length ? { kind: { in: f.kinds } } : {}),
       ...(status === 'unread' ? { readAt: null, archivedAt: null } : status === 'open' ? { archivedAt: null } : status === 'archived' ? { archivedAt: { not: null } } : {}),
       ...(f.q ? { content: { contains: f.q, mode: 'insensitive' } } : {}),
+      ...(f.upTo ? { createdAt: { lte: f.upTo } } : {}),
       ...(and.length ? { AND: and } : {}),
     };
+    return where;
+  }
+
+  async list(organizationId: string, f: InboxFilters) {
+    const people = await this._prisma.inboxPerson.findMany({ where: { organizationId } });
+    const personKey = (platform: string, authorId: string) => `${platform}:${authorId}`;
+    const byKey = new Map(people.map((p) => [personKey(p.platform, p.authorId), { ...p, tags: parseTags(p.tags) }]));
+    const where = this.whereFor(organizationId, f, people);
     const page = Math.max(0, f.page || 0);
     const [total, rows] = await Promise.all([
       this._prisma.inboxItem.count({ where }),
@@ -509,7 +518,7 @@ export class InboxService {
     ids: string[],
     body: { addTags?: unknown; removeTags?: unknown; muted?: boolean; note?: string | null; noteMode?: 'append' | 'replace' }
   ) {
-    const people = await this._prisma.inboxPerson.findMany({ where: { organizationId, id: { in: ids.map(String).slice(0, 500) } } });
+    const people = await this._prisma.inboxPerson.findMany({ where: { organizationId, id: { in: ids.map(String).slice(0, 5000) } } });
     if (!people.length) throw new Error('Nobody selected');
     for (const p of people) {
       const data = personChange(p, body);
@@ -523,6 +532,34 @@ export class InboxService {
       action === 'read' ? { readAt: new Date() } : action === 'unread' ? { readAt: null } : action === 'archive' ? { archivedAt: new Date(), readAt: new Date() } : { archivedAt: null };
     const r = await this._prisma.inboxItem.updateMany({ where: { organizationId, id: { in: ids.slice(0, 500) } }, data });
     return { updated: r.count };
+  }
+
+  /**
+   * Mark or delete everything the inbox shows with these filters, every page
+   * at once (not only the 50 on screen). Inbox only; nothing changes on the
+   * social network.
+   */
+  async markMatching(organizationId: string, f: InboxFilters, action: 'read' | 'unread' | 'archive' | 'unarchive' | 'delete') {
+    const people = await this._prisma.inboxPerson.findMany({ where: { organizationId } });
+    const where = this.whereFor(organizationId, { ...f, page: undefined }, people);
+    if (action === 'delete') {
+      const r = await this._prisma.inboxItem.deleteMany({ where });
+      return { deleted: r.count };
+    }
+    const now = new Date();
+    const data: Record<string, Date | null> =
+      action === 'read' ? { readAt: now } : action === 'unread' ? { readAt: null } : action === 'archive' ? { archivedAt: now, readAt: now } : { archivedAt: null };
+    const r = await this._prisma.inboxItem.updateMany({ where, data });
+    return { updated: r.count };
+  }
+
+  /** Everyone who wrote something the inbox shows with these filters (named people only). */
+  async matchingPeople(organizationId: string, f: InboxFilters) {
+    const people = await this._prisma.inboxPerson.findMany({ where: { organizationId } });
+    const where = this.whereFor(organizationId, { ...f, page: undefined }, people);
+    const authors = await this._prisma.inboxItem.findMany({ where, distinct: ['platform', 'authorId'], select: { platform: true, authorId: true }, take: 5000 });
+    const wanted = new Set(authors.map((a) => `${a.platform}:${a.authorId}`));
+    return people.filter((p) => wanted.has(`${p.platform}:${p.authorId}`)).map((p) => ({ ...p, tags: parseTags(p.tags) }));
   }
 
   /** Removes items from the inbox only; nothing changes on the social network. */

@@ -343,6 +343,8 @@ export const Inbox = () => {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
+  // "select everything": every item these filters match, on every page, up to this moment
+  const [allMatching, setAllMatching] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
 
   const get = useCallback(async (url: string) => (await fetch(url)).json(), []);
@@ -362,7 +364,13 @@ export const Inbox = () => {
   const { data: muted, mutate: mutateMuted } = useSWR<Person[]>('/inbox/people?muted=true', get);
   const { data: switches, mutate: mutateSwitches } = useSWR<{ mentions: string[]; messages: string[] }>('/inbox/switches', get);
   const { data: followSettings, mutate: mutateFollowSettings } = useSWR<Record<string, FollowSetting>>('/inbox/follows/settings', get);
+  const filterQuery = query.replace(/(^|&)page=\d+/, '');
   useEffect(() => setSelected([]), [query, view]);
+  useEffect(() => setAllMatching(null), [filterQuery, view]);
+  const { data: matchingPeople, mutate: mutateMatchingPeople } = useSWR<Person[]>(
+    allMatching ? `/inbox/matching-people?${filterQuery}&upTo=${encodeURIComponent(allMatching)}` : null,
+    get
+  );
   // every channel this view covers; the sidebar groups them by client
   const channelList = useMemo(
     () => allInboxChannels.filter((c) => (view === 'messages' ? DM_PLATFORMS : view === 'follows' ? FOLLOW_PLATFORMS : MENTION_PLATFORMS).includes(c.identifier)),
@@ -438,12 +446,21 @@ export const Inbox = () => {
     refresh();
   };
   const bulk = async (action: 'read' | 'archive' | 'unarchive' | 'delete') => {
-    if (!selected.length) return;
+    if (!selected.length && !allMatching) return;
     setBulkBusy(true);
-    const res = await fetch(action === 'delete' ? '/inbox/delete' : '/inbox/mark', { method: 'POST', body: JSON.stringify({ ids: selected, action }) });
+    const res = allMatching
+      ? await fetch('/inbox/mark-matching', {
+          method: 'POST',
+          body: JSON.stringify({ ...Object.fromEntries(new URLSearchParams(filterQuery)), upTo: allMatching, action }),
+        })
+      : await fetch(action === 'delete' ? '/inbox/delete' : '/inbox/mark', { method: 'POST', body: JSON.stringify({ ids: selected, action }) });
     setBulkBusy(false);
     if (!res.ok) return toaster.show(t('could_not_save', 'Could not save'), 'warning');
-    if (action === 'delete' || action === 'archive' || action === 'unarchive') setSelected([]);
+    if (allMatching) {
+      const r = await res.json().catch(() => ({}));
+      toaster.show(t('bulk_done', 'Done: {{n}} items', { n: r?.updated ?? r?.deleted ?? 0 }), 'success');
+    }
+    if (action === 'delete' || action === 'archive' || action === 'unarchive') (setSelected([]), setAllMatching(null), setPage(0));
     refresh();
   };
   const unmute = async (p: Person) => {
@@ -659,11 +676,17 @@ export const Inbox = () => {
               pageCount={data.items.length}
               archived={status === 'archived'}
               busy={bulkBusy}
-              onAll={(on) => setSelected(on ? data.items.map((i) => i.id) : [])}
+              onAll={(on) => (setSelected(on ? data.items.map((i) => i.id) : []), !on && setAllMatching(null))}
               onAction={bulk}
-              people={selectedPeople(data.items, selected)}
+              total={data.total}
+              allMatching={!!allMatching}
+              onAllMatching={(on) => {
+                setAllMatching(on ? new Date().toISOString() : null);
+                if (on) setSelected(data.items.map((i) => i.id));
+              }}
+              people={allMatching ? matchingPeople || [] : selectedPeople(data.items, selected)}
               allTags={(tags || []).map((x) => x.tag)}
-              onPeopleSaved={refresh}
+              onPeopleSaved={() => (refresh(), mutateMatchingPeople())}
             />
             {data.items.map((item) => (
               <Row
