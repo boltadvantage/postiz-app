@@ -122,6 +122,140 @@ export const PersonPanel: FC<{ person: Person; allTags: string[]; onSaved: () =>
 
 
 /** Shown while items are selected: act on all of them at once. */
+/** Tag, mute or add a note for everyone behind the selected items, in one go. */
+const BulkPeople: FC<{ people: Person[]; allTags: string[]; onSaved: () => void; onClose: () => void }> = ({ people, allTags, onSaved, onClose }) => {
+  const t = useT();
+  const fetch = useFetch();
+  const toaster = useToaster();
+  const [add, setAdd] = useState<string[]>([]);
+  const [remove, setRemove] = useState<string[]>([]);
+  const [draft, setDraft] = useState('');
+  const [mute, setMute] = useState<'' | 'mute' | 'unmute'>('');
+  const [note, setNote] = useState('');
+  const [replace, setReplace] = useState(false);
+  const [busy, setBusy] = useState(false);
+  // tags anyone selected already has, so they can be taken off
+  const present = [...new Set(people.flatMap((p) => p.tags))].sort();
+  const addTag = (raw: string) => {
+    const tag = raw.trim().toLowerCase().slice(0, 30);
+    if (tag && !add.includes(tag)) setAdd([...add, tag]);
+    setDraft('');
+  };
+  const suggestions = allTags.filter((x) => !add.includes(x) && (!draft || x.includes(draft.toLowerCase()))).slice(0, 6);
+  const changed = add.length || remove.length || mute || note.trim() || (replace && !note.trim());
+  const save = async () => {
+    if (mute === 'mute' && !window.confirm(t('bulk_mute_confirm', 'Mute {{n}} people? Their posts are hidden and new ones won’t be saved.', { n: people.length }))) return;
+    setBusy(true);
+    const body: any = { ids: people.map((p) => p.id) };
+    if (add.length) body.addTags = add;
+    if (remove.length) body.removeTags = remove;
+    if (mute) body.muted = mute === 'mute';
+    if (note.trim() || replace) {
+      body.note = note.trim() || null;
+      body.noteMode = replace ? 'replace' : 'append';
+    }
+    const res = await fetch('/inbox/people', { method: 'PUT', body: JSON.stringify(body) });
+    setBusy(false);
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      return toaster.show(b?.message || t('could_not_save', 'Could not save'), 'warning');
+    }
+    toaster.show(t('bulk_people_saved', 'Updated {{n}} people', { n: people.length }), 'success');
+    onSaved();
+    onClose();
+  };
+  const chip = 'rounded-full px-[8px] h-[22px] text-[11px] flex items-center gap-[4px]';
+  return (
+    <div className="w-full mt-[6px] rounded-[8px] bg-newBgColorInner border border-newTableBorder p-[10px] flex flex-col gap-[10px] text-[12px]">
+      <div className="text-textItemBlur">
+        {t('bulk_people_for', 'For {{n}} people:', { n: people.length })} {people.slice(0, 6).map((p) => p.name || p.handle || '?').join(', ')}
+        {people.length > 6 ? ` +${people.length - 6}` : ''}
+      </div>
+      <div className="flex flex-col gap-[6px]">
+        <div className="flex flex-wrap items-center gap-[6px]">
+          <span className="text-textItemBlur">{t('add_tags', 'Add tags')}</span>
+          {add.map((tag) => (
+            <span key={tag} className={`${chip} bg-[#612BD3] text-white`}>
+              {tag}
+              <button type="button" onClick={() => setAdd(add.filter((x) => x !== tag))} className="opacity-70 hover:opacity-100">×</button>
+            </span>
+          ))}
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault();
+                addTag(draft);
+              }
+            }}
+            placeholder={t('type_a_tag', 'type a tag, Enter')}
+            className="bg-newTableHeader border border-newTableBorder rounded-[6px] h-[26px] px-[8px] outline-none w-[140px]"
+          />
+          {suggestions.map((x) => (
+            <button key={x} type="button" onClick={() => addTag(x)} className={`${chip} bg-[#612BD3]/20 hover:bg-[#612BD3]/40`}>
+              + {x}
+            </button>
+          ))}
+        </div>
+        {!!present.length && (
+          <div className="flex flex-wrap items-center gap-[6px]">
+            <span className="text-textItemBlur">{t('remove_tags', 'Take off')}</span>
+            {present.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => setRemove(remove.includes(tag) ? remove.filter((x) => x !== tag) : [...remove, tag])}
+                className={clsx(chip, remove.includes(tag) ? 'bg-red-600 text-white line-through' : 'bg-newTableHeader')}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-[10px]">
+        <span className="text-textItemBlur">{t('mute', 'Mute')}</span>
+        {(['', 'mute', 'unmute'] as const).map((m) => (
+          <label key={m || 'leave'} className="flex items-center gap-[4px] cursor-pointer">
+            <input type="radio" checked={mute === m} onChange={() => setMute(m)} />
+            {m === 'mute' ? t('mute_them', 'Mute them') : m === 'unmute' ? t('unmute_them', 'Unmute them') : t('leave_as_is', 'Leave as is')}
+          </label>
+        ))}
+      </div>
+      <div className="flex flex-col gap-[4px]">
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={2}
+          maxLength={1000}
+          placeholder={t('bulk_note_placeholder', 'Note (added as a new line to each person’s note)')}
+          className="bg-newTableHeader border border-newTableBorder rounded-[6px] p-[6px] outline-none resize-y"
+        />
+        <label className="flex items-center gap-[6px] cursor-pointer text-textItemBlur">
+          <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} />
+          {t('replace_notes', 'Replace their notes instead (empty = clear them)')}
+        </label>
+      </div>
+      <div className="flex gap-[6px]">
+        <button type="button" disabled={busy || !changed} onClick={save} className="px-[12px] h-[28px] rounded-[6px] bg-[#612BD3] text-white disabled:opacity-40">
+          {busy ? t('saving', 'Saving…') : t('apply', 'Apply')}
+        </button>
+        <button type="button" onClick={onClose} className="px-[10px] h-[28px] rounded-[6px] hover:bg-newTableHeader">
+          {t('cancel', 'Cancel')}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+/** People behind the selected items, once each; unnamed Facebook commenters can't be tagged meaningfully. */
+export const selectedPeople = (items: Array<{ id: string; person: Person | null }>, selected: string[]) => {
+  const byId = new Map<string, Person>();
+  for (const i of items) if (selected.includes(i.id) && i.person && !i.person.authorId.startsWith('anon:')) byId.set(i.person.id, i.person);
+  return [...byId.values()];
+};
+
 export const SelectionBar: FC<{
   count: number;
   pageCount: number;
@@ -129,8 +263,16 @@ export const SelectionBar: FC<{
   busy: boolean;
   onAll: (on: boolean) => void;
   onAction: (action: 'read' | 'archive' | 'unarchive' | 'delete') => void;
-}> = ({ count, pageCount, archived, busy, onAll, onAction }) => {
+  /** who the selected items are from, for tagging, muting or noting them all at once */
+  people?: Person[];
+  allTags?: string[];
+  onPeopleSaved?: () => void;
+}> = ({ count, pageCount, archived, busy, onAll, onAction, people, allTags, onPeopleSaved }) => {
   const t = useT();
+  const [bulk, setBulk] = useState(false);
+  useEffect(() => {
+    if (!count) setBulk(false);
+  }, [count]);
   const btn = 'px-[10px] h-[28px] rounded-[6px] border border-newTableBorder disabled:opacity-40';
   return (
     <div className="flex flex-wrap items-center gap-[6px] text-[12px] rounded-[8px] bg-newTableHeader px-[10px] py-[6px]">
@@ -144,6 +286,17 @@ export const SelectionBar: FC<{
           <button type="button" disabled={busy} onClick={() => onAction(archived ? 'unarchive' : 'archive')} className={btn}>
             {archived ? t('unarchive', 'Unarchive') : t('archive', 'Archive')}
           </button>
+          {people && onPeopleSaved && (
+            <button
+              type="button"
+              disabled={busy || !people.length}
+              onClick={() => setBulk(!bulk)}
+              className={clsx(btn, bulk && 'bg-[#612BD3] text-white border-[#612BD3]')}
+              title={!people.length ? t('bulk_people_none', 'Nobody to tag: Facebook hasn’t named these yet') : undefined}
+            >
+              {t('tag_mute_note', 'Tag / mute / note')} ({people.length})
+            </button>
+          )}
           <button
             type="button"
             disabled={busy}
@@ -156,6 +309,9 @@ export const SelectionBar: FC<{
           </button>
           <button type="button" onClick={() => onAll(false)} className="px-[8px] h-[28px] underline">{t('clear', 'Clear')}</button>
         </>
+      )}
+      {bulk && people && onPeopleSaved && !!people.length && (
+        <BulkPeople people={people} allTags={allTags || []} onSaved={onPeopleSaved} onClose={() => setBulk(false)} />
       )}
     </div>
   );

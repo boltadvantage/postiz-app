@@ -304,11 +304,16 @@ export class BoltPeopleTool implements AgentToolInterface {
 The people who show up in the inbox and messages, with the user's private tags, notes and mutes (none of this is visible on the social networks; muting doesn't block or notify anyone).
 - action "list": everyone (optionally only muted, or with a tag); also returns all tags with counts.
 - action "update": set "tags" (replaces the list), "muted", and/or "note" for one person id (person ids come from inbox items and conversations).
+- action "bulkUpdate": the same change for many "personIds" at once: "addTags" / "removeTags" (their other tags stay), "muted", and "note" (added as a new line, or replacing the note with noteMode "replace").
 Muting hides everything from that person and stops saving their new posts and messages. Confirm with the user before muting someone.
 `,
       inputSchema: z.object({
-        action: z.enum(['list', 'update']),
+        action: z.enum(['list', 'update', 'bulkUpdate']),
         personId: z.string().optional(),
+        personIds: z.array(z.string()).max(500).optional().describe('bulkUpdate: who to change'),
+        addTags: z.array(z.string()).optional().describe('bulkUpdate: tags to add'),
+        removeTags: z.array(z.string()).optional().describe('bulkUpdate: tags to take off'),
+        noteMode: z.enum(['append', 'replace']).optional().describe('bulkUpdate: add the note as a new line (default) or replace it'),
         muted: z.boolean().optional(),
         tag: z.string().optional().describe('list: only people with this tag'),
         tags: z.array(z.string()).optional().describe('update: the full new tag list'),
@@ -320,6 +325,16 @@ Muting hides everything from that person and stops saving their new posts and me
           const org = orgId(input, context);
           if (input.action === 'list') {
             return { people: await this._api.people(org, { muted: input.muted, tag: input.tag }), tags: await this._api.tags(org) };
+          }
+          if (input.action === 'bulkUpdate') {
+            if (!input.personIds?.length) throw new Error('personIds is required for bulkUpdate');
+            return this._api.updatePeople(org, input.personIds, {
+              addTags: input.addTags,
+              removeTags: input.removeTags,
+              muted: input.muted,
+              note: input.note,
+              noteMode: input.noteMode,
+            });
           }
           if (!input.personId) throw new Error('personId is required to update');
           return this._api.updatePerson(org, input.personId, { tags: input.tags, muted: input.muted, note: input.note });

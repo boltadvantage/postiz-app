@@ -13,7 +13,7 @@ import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
 import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
-import { Channel, ChannelSwitches, FollowSetting, HoldButton, Person, PersonPanel, pretty, ProblemNote, SelectionBar, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
+import { Channel, ChannelSwitches, FollowSetting, HoldButton, Person, PersonPanel, pretty, ProblemNote, SelectionBar, selectedPeople, Status } from '@gitroom/frontend/components/bolt-inbox/shared';
 import { Follows } from '@gitroom/frontend/components/bolt-inbox/follows';
 import { AlertWords } from '@gitroom/frontend/components/bolt-inbox/alert.words';
 import { alertRanges } from '@gitroom/nestjs-libraries/bolt-inbox/alert-words';
@@ -661,6 +661,9 @@ export const Inbox = () => {
               busy={bulkBusy}
               onAll={(on) => setSelected(on ? data.items.map((i) => i.id) : [])}
               onAction={bulk}
+              people={selectedPeople(data.items, selected)}
+              allTags={(tags || []).map((x) => x.tag)}
+              onPeopleSaved={refresh}
             />
             {data.items.map((item) => (
               <Row
