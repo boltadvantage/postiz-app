@@ -267,7 +267,11 @@ export const SelectionBar: FC<{
   people?: Person[];
   allTags?: string[];
   onPeopleSaved?: () => void;
-}> = ({ count, pageCount, archived, busy, onAll, onAction, people, allTags, onPeopleSaved }) => {
+  /** "select everything": how many match the filters on all pages, and whether they're all selected */
+  total?: number;
+  allMatching?: boolean;
+  onAllMatching?: (on: boolean) => void;
+}> = ({ count, pageCount, archived, busy, onAll, onAction, people, allTags, onPeopleSaved, total, allMatching, onAllMatching }) => {
   const t = useT();
   const [bulk, setBulk] = useState(false);
   useEffect(() => {
@@ -277,10 +281,19 @@ export const SelectionBar: FC<{
   return (
     <div className="flex flex-wrap items-center gap-[6px] text-[12px] rounded-[8px] bg-newTableHeader px-[10px] py-[6px]">
       <label className="flex items-center gap-[6px] cursor-pointer me-[6px]">
-        <input type="checkbox" checked={count > 0 && count === pageCount} onChange={(e) => onAll(e.target.checked)} />
-        {count ? t('n_selected', '{{n}} selected', { n: count }) : t('select_all_page', 'Select all on this page')}
+        <input type="checkbox" checked={allMatching || (count > 0 && count === pageCount)} onChange={(e) => onAll(e.target.checked)} />
+        {allMatching
+          ? t('all_n_selected', 'All {{n}} selected', { n: total })
+          : count
+          ? t('n_selected', '{{n}} selected', { n: count })
+          : t('select_all_page', 'Select all on this page')}
       </label>
-      {count > 0 && (
+      {onAllMatching && total !== undefined && total > pageCount && (
+        <button type="button" onClick={() => onAllMatching(!allMatching)} className="px-[8px] h-[28px] underline text-[#a78bfa]">
+          {allMatching ? t('only_this_page', 'Only this page') : t('select_everything', 'Select all {{n}}', { n: total })}
+        </button>
+      )}
+      {(count > 0 || allMatching) && (
         <>
           <button type="button" disabled={busy} onClick={() => onAction('read')} className={btn}>{t('mark_read', 'Mark read')}</button>
           <button type="button" disabled={busy} onClick={() => onAction(archived ? 'unarchive' : 'archive')} className={btn}>
@@ -301,7 +314,7 @@ export const SelectionBar: FC<{
             type="button"
             disabled={busy}
             onClick={() => {
-              if (window.confirm(t('confirm_delete_inbox', 'Delete {{n}} from the inbox? This only removes them here, not on the social network, and can’t be undone.', { n: count }))) onAction('delete');
+              if (window.confirm(t('confirm_delete_inbox', 'Delete {{n}} from the inbox? This only removes them here, not on the social network, and can’t be undone.', { n: allMatching ? total : count }))) onAction('delete');
             }}
             className={`${btn} text-red-400`}
           >

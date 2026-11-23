@@ -41,6 +41,12 @@ export class PublicBoltController {
     return this._api.inbox(org.id, { status, channels: list(channels), kinds: list(kinds), tag, q, showMuted: showMuted === 'true', page: Number(page) || 0 });
   }
 
+  /** Body: the same filters as GET /inbox (channels and kinds as arrays) plus action. Applies to every page. */
+  @Post('/inbox/mark-matching')
+  markInboxMatching(@GetOrgFromRequest() org: Organization, @Body() body: any) {
+    return wrap(() => this._api.markInboxMatching(org.id, body || {}, body?.action));
+  }
+
   @Post('/inbox/mark')
   markInbox(@GetOrgFromRequest() org: Organization, @Body() body: { ids?: string[]; action?: string }) {
     return wrap(() => this._api.markInbox(org.id, ids(body), body.action!));

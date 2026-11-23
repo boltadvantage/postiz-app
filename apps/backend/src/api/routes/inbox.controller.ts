@@ -3,7 +3,7 @@ import { Body, Controller, Get, HttpException, Param, Post, Put, Query } from '@
 import { ApiTags } from '@nestjs/swagger';
 import { Organization } from '@prisma/client';
 import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { INBOX_ACTIONS, InboxService, MENTION_PROVIDERS, MODERATE_ACTIONS } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
+import { INBOX_ACTIONS, InboxFilters, InboxService, MENTION_PROVIDERS, MODERATE_ACTIONS } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
 import { DmService } from '@gitroom/nestjs-libraries/bolt-inbox/dm.service';
 import { inboxSwitches, setInboxSwitch } from '@gitroom/nestjs-libraries/bolt-inbox/switches';
 import { FollowsService } from '@gitroom/nestjs-libraries/bolt-inbox/follows.service';
@@ -15,6 +15,22 @@ import { alertWords, saveAlertWords } from '@gitroom/nestjs-libraries/bolt-inbox
 import { xBudgetSettings } from '@gitroom/nestjs-libraries/bolt-costs/x-billing';
 
 const list = (v?: string) => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : undefined);
+
+/** The inbox filters from a query string or body (the same names the page uses). */
+const filtersFrom = (q: Record<string, any>): InboxFilters => {
+  const upTo = q.upTo ? new Date(String(q.upTo)) : undefined;
+  return {
+    hideUnnamed: String(q.hideUnnamed) === 'true',
+    integrationIds: list(q.channels ? String(q.channels) : undefined),
+    kinds: list(q.kinds ? String(q.kinds) : undefined)?.filter((k) => ['mention', 'reply', 'quote'].includes(k)) as any,
+    status: (['unread', 'open', 'archived', 'all'].includes(String(q.status || '')) ? q.status : 'open') as any,
+    tag: q.tag ? String(q.tag) : undefined,
+    showMuted: String(q.showMuted) === 'true',
+    q: q.q ? String(q.q).slice(0, 200) : undefined,
+    page: Number(q.page) || 0,
+    upTo: upTo && !isNaN(upTo.getTime()) ? upTo : undefined,
+  };
+};
 const wrap = async <T>(fn: () => Promise<T>) => {
   try {
     return await fn();
@@ -56,27 +72,22 @@ export class InboxController {
   }
 
   @Get('/')
-  items(
-    @GetOrgFromRequest() org: Organization,
-    @Query('channels') channels?: string,
-    @Query('kinds') kinds?: string,
-    @Query('status') status?: string,
-    @Query('tag') tag?: string,
-    @Query('showMuted') showMuted?: string,
-    @Query('q') q?: string,
-    @Query('page') page?: string,
-    @Query('hideUnnamed') hideUnnamed?: string
-  ) {
-    return this._inbox.list(org.id, {
-      hideUnnamed: hideUnnamed === 'true',
-      integrationIds: list(channels),
-      kinds: list(kinds)?.filter((k) => ['mention', 'reply', 'quote'].includes(k)) as any,
-      status: (['unread', 'open', 'archived', 'all'].includes(status || '') ? status : 'open') as any,
-      tag: tag || undefined,
-      showMuted: showMuted === 'true',
-      q: q ? q.slice(0, 200) : undefined,
-      page: Number(page) || 0,
-    });
+  items(@GetOrgFromRequest() org: Organization, @Query() query: Record<string, string>) {
+    return this._inbox.list(org.id, filtersFrom(query));
+  }
+
+  /** "Select everything": who wrote what these filters match, for tagging, muting or noting them all. */
+  @Get('/matching-people')
+  matchingPeople(@GetOrgFromRequest() org: Organization, @Query() query: Record<string, string>) {
+    return this._inbox.matchingPeople(org.id, filtersFrom(query));
+  }
+
+  /** "Select everything": mark, archive or delete everything these filters match, on every page. */
+  @Post('/mark-matching')
+  markMatching(@GetOrgFromRequest() org: Organization, @Body() body: Record<string, string> & { action?: string }) {
+    const action = body?.action;
+    if (!['read', 'unread', 'archive', 'unarchive', 'delete'].includes(action || '')) throw new HttpException('Bad request', 400);
+    return this._inbox.markMatching(org.id, filtersFrom(body || {}), action as any);
   }
 
   @Get('/counts')
