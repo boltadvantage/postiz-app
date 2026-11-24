@@ -4,6 +4,7 @@
 // channel holds (instagram_manage_comments). Meta doesn't charge for these.
 // @mentions in other people's captions and comments only arrive by webhook,
 // so they aren't here.
+import { instagramToUs } from '@gitroom/nestjs-libraries/bolt-inbox/to-us';
 import { META_GRAPH_API_VERSION } from '@gitroom/nestjs-libraries/integrations/social/facebook.provider';
 import { pageToken, unreachable } from '@gitroom/nestjs-libraries/bolt-inbox/meta.dm';
 
@@ -25,6 +26,8 @@ export type IncomingInstagram = {
   targetText: string | null;
   /** comments are one level deep: replies go on the top-level comment; tags can't be replied to */
   threadId: string | null;
+  /** aimed at the account (see to-us.ts) */
+  toUs: boolean | null;
 };
 
 /** Recent posts with their comments → other people's comments newer than `since`. */
@@ -50,6 +53,7 @@ export function parseComments(res: any, self: { id: string; username?: string },
         targetId: parent ? String(parent.id) : String(post.id),
         targetText: (parent ? parent.text : post.caption) || null,
         threadId: String(parent?.id || c.id),
+        toUs: instagramToUs(c.text || '', parent, self),
       });
     }
   }
@@ -75,6 +79,7 @@ export function parseTags(res: any, since: Date) {
       targetId: String(m.id),
       targetText: null,
       threadId: null,
+      toUs: true,
     });
   }
   return { items, newest: new Date(newest) };

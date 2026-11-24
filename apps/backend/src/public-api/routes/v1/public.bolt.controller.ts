@@ -36,9 +36,21 @@ export class PublicBoltController {
     @Query('tag') tag?: string,
     @Query('q') q?: string,
     @Query('showMuted') showMuted?: string,
-    @Query('page') page?: string
+    @Query('page') page?: string,
+    @Query('toUsOnly') toUsOnly?: string,
+    @Query('hideUnnamed') hideUnnamed?: string
   ) {
-    return this._api.inbox(org.id, { status, channels: list(channels), kinds: list(kinds), tag, q, showMuted: showMuted === 'true', page: Number(page) || 0 });
+    return this._api.inbox(org.id, {
+      status,
+      channels: list(channels),
+      kinds: list(kinds),
+      tag,
+      q,
+      showMuted: showMuted === 'true',
+      page: Number(page) || 0,
+      toUsOnly: toUsOnly === 'true',
+      hideUnnamed: hideUnnamed === 'true',
+    });
   }
 
   /** Body: the same filters as GET /inbox (channels and kinds as arrays) plus action. Applies to every page. */

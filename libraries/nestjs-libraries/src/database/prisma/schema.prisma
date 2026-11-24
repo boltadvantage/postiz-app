@@ -344,6 +344,9 @@ model InboxItem {
   raw              String?
   /// alert words found in it (comma-separated); a muted person's alert comment still comes in
   alertWords       String?
+  /// aimed at the client (a comment on our post, a reply to us, a mention), or false when
+  /// it answers someone else in our thread; null until known
+  toUs             Boolean?
   publishedAt      DateTime
   readAt           DateTime?
   archivedAt       DateTime?

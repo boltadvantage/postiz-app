@@ -4,6 +4,7 @@
 // costs nothing: Meta doesn't charge for the Graph API, it only rate-limits.
 import { META_GRAPH_API_VERSION } from '@gitroom/nestjs-libraries/integrations/social/facebook.provider';
 import { unreachable } from '@gitroom/nestjs-libraries/bolt-inbox/meta.dm';
+import { facebookToUs } from '@gitroom/nestjs-libraries/bolt-inbox/to-us';
 
 const GRAPH = `https://graph.facebook.com/${META_GRAPH_API_VERSION}`;
 /** How far back to look for posts that may have new comments. */
@@ -22,6 +23,8 @@ export type IncomingFacebook = {
   targetText: string | null;
   /** Facebook threads are one level deep: replies go on the top-level comment */
   threadId: string;
+  /** aimed at the Page (see to-us.ts) */
+  toUs: boolean | null;
 };
 
 const local = (id: string) => (id.includes('_') ? id.split('_').pop()! : id);
@@ -61,6 +64,7 @@ export function parseFeed(res: any, pageId: string, since: Date) {
         targetId: parent?.id || post.id,
         targetText: (parent ? parent.message : post.message) || null,
         threadId: parent?.id || c.id,
+        toUs: facebookToUs(c, parent, pageId),
       });
     }
   }
@@ -107,7 +111,7 @@ export class FacebookInbox {
     const list = await this.call(`${this.pageId}/feed?fields=${encodeURIComponent('id,message,permalink_url,updated_time')}&limit=${POSTS}&since=${postsSince}`);
     // a post's updated_time moves when someone comments on it
     const active = (list?.data || []).filter((p: any) => !p.updated_time || Date.parse(p.updated_time) > since.getTime() - 60_000);
-    const commentFields = 'id,message,created_time,permalink_url,attachment{type},from{id,name},parent{id,message}';
+    const commentFields = 'id,message,created_time,permalink_url,attachment{type},from{id,name},message_tags,parent{id,message,from{id}}';
     const after = Math.floor(since.getTime() / 1000) - 60;
     for (const post of active) {
       const res = await this.call(

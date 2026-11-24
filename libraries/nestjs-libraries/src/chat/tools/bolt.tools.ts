@@ -44,6 +44,7 @@ export class BoltInboxListTool implements AgentToolInterface {
       description: `
 List what people posted at the user's channels: Nostr and X mentions, replies and quotes, comments on their Facebook Pages' and Instagram accounts' posts (kind "reply", platform "facebook"/"instagram"), and Instagram posts that tagged them (kind "mention", platform "instagram"). Newest first, 50 per page.
 Muted people are left out unless showMuted is true. Each item has an "id" (use it with boltInboxRespondTool), the text, who wrote it ("person", with the user's private tags and notes), the post of theirs it answers ("inReplyToText"), and whether it was already read, replied to, reposted or quoted.
+"toUs" is false when the item answers another commenter in the user's thread rather than the user (null when not known yet); toUsOnly leaves those out, but items with alert words ("alertWords") always show. hideUnnamed leaves out Facebook comments whose writer isn't known yet.
 Direct messages are separate: use boltConversationsListTool.
 `,
       inputSchema: z.object({
@@ -53,6 +54,8 @@ Direct messages are separate: use boltConversationsListTool.
         tag: z.string().optional().describe('Only people with this private tag'),
         q: z.string().optional().describe('Search text (case-insensitive)'),
         showMuted: z.boolean().optional(),
+        toUsOnly: z.boolean().optional().describe('Only items aimed at the user, not replies to other commenters (alert-word items still show)'),
+        hideUnnamed: z.boolean().optional(),
         page: z.number().int().min(0).optional(),
       }),
       outputSchema,
@@ -235,6 +238,7 @@ export class BoltInboxMarkMatchingTool implements AgentToolInterface {
         q: z.string().optional().describe('Text search'),
         showMuted: z.boolean().optional(),
         hideUnnamed: z.boolean().optional().describe('Leave out Facebook comments whose writer is not known yet'),
+        toUsOnly: z.boolean().optional().describe('Only items aimed at the user (alert-word items still count)'),
       }),
       outputSchema,
       execute: async (input, context) => run(() => this._api.markInboxMatching(orgId(input, context), input, input.action)),

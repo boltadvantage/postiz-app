@@ -21,6 +21,7 @@ const filtersFrom = (q: Record<string, any>): InboxFilters => {
   const upTo = q.upTo ? new Date(String(q.upTo)) : undefined;
   return {
     hideUnnamed: String(q.hideUnnamed) === 'true',
+    toUsOnly: String(q.toUsOnly) === 'true',
     integrationIds: list(q.channels ? String(q.channels) : undefined),
     kinds: list(q.kinds ? String(q.kinds) : undefined)?.filter((k) => ['mention', 'reply', 'quote'].includes(k)) as any,
     status: (['unread', 'open', 'archived', 'all'].includes(String(q.status || '')) ? q.status : 'open') as any,
