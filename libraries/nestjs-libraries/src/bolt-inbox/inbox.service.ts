@@ -13,6 +13,7 @@ import { buildLike, buildQuote, buildReply, buildRepost, InboxKind, NostrInbox }
 import { XInbox } from '@gitroom/nestjs-libraries/bolt-inbox/x.inbox';
 import { FacebookInbox } from '@gitroom/nestjs-libraries/bolt-inbox/facebook.inbox';
 import { WebhookComment } from '@gitroom/nestjs-libraries/bolt-inbox/facebook.webhook';
+import { replyToUs } from '@gitroom/nestjs-libraries/bolt-inbox/to-us';
 import { IncomingInstagram, InstagramInbox } from '@gitroom/nestjs-libraries/bolt-inbox/instagram.inbox';
 import { switchChecker } from '@gitroom/nestjs-libraries/bolt-inbox/switches';
 import { alertMatcher, alertWords } from '@gitroom/nestjs-libraries/bolt-inbox/alert-words';
@@ -42,6 +43,8 @@ export type InboxFilters = {
   showMuted?: boolean;
   /** leave out Facebook comments whose writer we don't know yet */
   hideUnnamed?: boolean;
+  /** only items aimed at the client, leaving out replies to other commenters (flagged ones always show) */
+  toUsOnly?: boolean;
   q?: string;
   page?: number;
   /** only items that reached the inbox by this time (so "all matching" doesn't sweep up newer ones) */
@@ -116,9 +119,37 @@ export class InboxService {
           this._logger.warn(`${integration.providerIdentifier} ${integration.id}: ${err?.message || err}`);
         }
       }
+      await this.settleToUs().catch((err) => this._logger.warn(`to-us: ${err?.message || err}`));
       return true;
     });
     return ran === true;
+  }
+
+  /**
+   * Items whose target couldn't be told from the comment alone (and items from
+   * before this was kept): a reply answers someone else when what it replies to
+   * is in the inbox, written by another person. Our own posts and comments are
+   * never inbox items, so a reply to something that isn't here is to us.
+   * Unnamed Facebook writers wait until the webhook names them.
+   */
+  async settleToUs() {
+    await this._prisma.$executeRaw`
+      UPDATE "InboxItem" a SET "toUs" = CASE
+        WHEN a.kind <> 'reply' OR a."inReplyToId" IS NULL THEN true
+        ELSE NOT EXISTS (
+          SELECT 1 FROM "InboxItem" b
+          WHERE b."integrationId" = a."integrationId" AND b."externalId" = a."inReplyToId" AND b."authorId" <> a."authorId"
+        )
+      END
+      WHERE a."toUs" IS NULL
+        AND (
+          a.kind <> 'reply' OR a."inReplyToId" IS NULL OR (
+            a."authorId" NOT LIKE 'anon:%' AND NOT EXISTS (
+              SELECT 1 FROM "InboxItem" c
+              WHERE c."integrationId" = a."integrationId" AND c."externalId" = a."inReplyToId" AND c."authorId" LIKE 'anon:%'
+            )
+          )
+        )`;
   }
 
   isRunning() {
@@ -213,6 +244,7 @@ export class InboxService {
             inReplyToText: clip(targets.get(i.targetId || '')?.content, 280),
             raw: JSON.stringify(e),
             alertWords: words.join(',') || null,
+            toUs: replyToUs(i.kind, targets.get(i.targetId || '')?.pubkey, integration.internalId),
             publishedAt: new Date(e.created_at * 1000),
           },
           update: {},
@@ -285,6 +317,7 @@ export class InboxService {
           inReplyToId: m.targetId,
           inReplyToText: clip(m.targetText, 280),
           alertWords: words.join(',') || null,
+          toUs: replyToUs(m.kind, m.targetAuthor, integration.internalId),
           publishedAt: m.createdAt,
         },
         update: {},
@@ -339,6 +372,7 @@ export class InboxService {
           inReplyToText: clip(c.targetText, 280),
           raw: JSON.stringify({ thread: c.threadId }),
           alertWords: words.join(',') || null,
+          toUs: c.toUs,
           publishedAt: c.createdAt,
         },
         update: { url: c.url },
@@ -394,6 +428,7 @@ export class InboxService {
           inReplyToText: clip(c.targetText, 280),
           raw: c.threadId ? JSON.stringify({ thread: c.threadId }) : null,
           alertWords: words.join(',') || null,
+          toUs: c.toUs,
           publishedAt: c.createdAt,
         },
         update: {},
@@ -415,6 +450,10 @@ export class InboxService {
     }
     if (f.hideUnnamed) {
       and.push({ NOT: { platform: 'facebook', authorId: { startsWith: 'anon:' } } });
+    }
+    if (f.toUsOnly) {
+      // not yet known counts as to us; alert-word comments always show so they can be removed
+      and.push({ OR: [{ toUs: true }, { toUs: null }, { alertWords: { not: null } }] });
     }
     if (tagged) {
       and.push(tagged.length ? { OR: tagged.map((p) => ({ platform: p.platform, authorId: p.authorId })) } : { id: '__none__' });

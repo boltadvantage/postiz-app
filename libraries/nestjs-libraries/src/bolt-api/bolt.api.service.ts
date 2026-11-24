@@ -83,8 +83,10 @@ export class BoltApiService {
 
   // ---------- inbox (mentions, replies, quotes) ----------
 
-  async inbox(orgId: string, f: { status?: string; channels?: string[]; kinds?: string[]; tag?: string; q?: string; page?: number; showMuted?: boolean }) {
+  async inbox(orgId: string, f: { status?: string; channels?: string[]; kinds?: string[]; tag?: string; q?: string; page?: number; showMuted?: boolean; toUsOnly?: boolean; hideUnnamed?: boolean }) {
     const r = await this._inbox.list(orgId, {
+      toUsOnly: !!f.toUsOnly,
+      hideUnnamed: !!f.hideUnnamed,
       status: status(f.status),
       integrationIds: f.channels?.length ? f.channels : undefined,
       kinds: f.kinds?.filter((k) => KINDS.includes(k)) as any,
@@ -114,6 +116,9 @@ export class BoltApiService {
         reposted: !!i.repostedAt,
         quoted: !!i.quotedAt,
         liked: !!i.likedAt,
+        // false: answers another commenter, not the client; null: not known yet
+        toUs: i.toUs ?? null,
+        alertWords: i.alertWords ? String(i.alertWords).split(',') : [],
         person: person(i.person),
       })),
     };
@@ -127,7 +132,7 @@ export class BoltApiService {
   /** Mark, archive or delete everything the inbox filters match, every page at once. */
   markInboxMatching(
     orgId: string,
-    f: { status?: string; channels?: string[]; kinds?: string[]; tag?: string; q?: string; showMuted?: boolean; hideUnnamed?: boolean },
+    f: { status?: string; channels?: string[]; kinds?: string[]; tag?: string; q?: string; showMuted?: boolean; hideUnnamed?: boolean; toUsOnly?: boolean },
     action: string
   ) {
     if (!['read', 'unread', 'archive', 'unarchive', 'delete'].includes(action)) throw new Error('action must be read, unread, archive, unarchive or delete');
@@ -141,6 +146,7 @@ export class BoltApiService {
         q: f.q ? String(f.q).slice(0, 200) : undefined,
         showMuted: !!f.showMuted,
         hideUnnamed: !!f.hideUnnamed,
+        toUsOnly: !!f.toUsOnly,
         upTo: new Date(),
       },
       action as any

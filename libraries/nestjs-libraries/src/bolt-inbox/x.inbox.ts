@@ -13,6 +13,8 @@ export type IncomingX = {
   author: { id: string; handle?: string; name?: string; avatar?: string };
   targetId: string | null;
   targetText: string | null;
+  /** who wrote the post it answers or quotes, when X said */
+  targetAuthor: string | null;
 };
 
 /** One mentions page → inbox items, plus what X returned (for billing). `self` = the channel's X user id. */
@@ -33,6 +35,7 @@ export function parseMentions(res: any, self?: string) {
       author: { id: t.author_id, handle: u.username, name: u.name, avatar: u.profile_image_url },
       targetId: target?.id || null,
       targetText: target ? tweets.get(target.id)?.text || null : null,
+      targetAuthor: (target ? tweets.get(target.id)?.author_id : null) || (replied ? t.in_reply_to_user_id : null) || null,
     } as IncomingX;
   });
   const resources: XResources = {
@@ -67,7 +70,7 @@ export class XInbox {
         ? { since_id: opts.sinceId }
         : { start_time: new Date(Date.now() - (opts.firstRunDays ?? 7) * 86400000).toISOString() }),
       expansions: ['author_id', 'referenced_tweets.id'],
-      'tweet.fields': ['created_at', 'conversation_id', 'referenced_tweets', 'text', 'author_id'],
+      'tweet.fields': ['created_at', 'conversation_id', 'referenced_tweets', 'text', 'author_id', 'in_reply_to_user_id'],
       'user.fields': ['username', 'name', 'profile_image_url'],
     });
     return parseMentions(res.data ? { data: res.data.data, includes: res.data.includes, meta: res.data.meta } : res, userId);

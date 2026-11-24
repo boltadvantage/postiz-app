@@ -60,6 +60,8 @@ type Item = {
   likedAt: string | null;
   /** alert words it contains, comma-separated */
   alertWords?: string | null;
+  /** false: answers another commenter in the thread, not the client */
+  toUs?: boolean | null;
   person: Person | null;
 };
 
@@ -202,6 +204,11 @@ const Row: FC<{ item: Item; channel?: Channel; allTags: string[]; refresh: () =>
               <span key={tag} className="rounded-full bg-[#612BD3]/30 px-[8px] h-[20px] text-[11px] flex items-center">{tag}</span>
             ))}
             {p?.muted && <span className="rounded-full bg-red-900/50 px-[8px] h-[20px] text-[11px] flex items-center">{t('muted', 'muted')}</span>}
+            {item.toUs === false && (
+              <span className="rounded-full bg-newBgLineColor px-[8px] h-[20px] text-[11px] flex items-center text-textItemBlur">
+                {t('reply_to_someone_else', 'Reply to someone else')}
+              </span>
+            )}
             {!!item.alertWords && (
               <span className="rounded-full bg-red-600 text-white px-[8px] h-[20px] text-[11px] flex items-center" title={item.alertWords}>
                 ⚠ {item.alertWords.split(',').join(', ')}
@@ -339,6 +346,22 @@ export const Inbox = () => {
       // not remembered, still applied
     }
   };
+  // replies to other commenters in the client's threads; flagged ones still show
+  const [toUsOnly, setToUsOnlyState] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('bolt-inbox-to-us-only') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const setToUsOnly = (on: boolean) => {
+    setToUsOnlyState(on);
+    try {
+      localStorage.setItem('bolt-inbox-to-us-only', on ? '1' : '0');
+    } catch {
+      // not remembered, still applied
+    }
+  };
   const [q, setQ] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
@@ -356,6 +379,7 @@ export const Inbox = () => {
     ...(tag ? { tag } : {}),
     ...(showMuted ? { showMuted: 'true' } : {}),
     ...(hideUnnamed ? { hideUnnamed: 'true' } : {}),
+    ...(toUsOnly ? { toUsOnly: 'true' } : {}),
     ...(search ? { q: search } : {}),
   }).toString();
   const { data, mutate, isLoading } = useSWR<{ total: number; pages: number; items: Item[] }>(view === 'mentions' ? `/inbox?${query}` : null, get, { refreshInterval: 60000 });
@@ -593,6 +617,18 @@ export const Inbox = () => {
               {t('hide_unnamed_facebook', 'Hide unnamed Facebook users')}
             </label>
           )}
+          {view === 'mentions' && (
+            <label
+              className="flex items-start gap-[8px] cursor-pointer px-[2px]"
+              title={t('to_us_only_hint', 'Leaves out people answering other commenters in the thread. Comments with alert words always show.')}
+            >
+              <input type="checkbox" className="mt-[3px]" checked={toUsOnly} onChange={(e) => (setToUsOnly(e.target.checked), setPage(0))} />
+              <span>
+                {t('to_us_only', 'Only replies to us')}
+                <span className="block text-[11px] text-textItemBlur">{t('to_us_only_note', '⚠ flagged ones still show')}</span>
+              </span>
+            </label>
+          )}
           {view === 'mentions' && <AlertWords channels={channelList} />}
           {!!muted?.length && (
             <details className="text-[12px] text-textItemBlur">
@@ -667,7 +703,7 @@ export const Inbox = () => {
           <LoadingComponent />
         ) : !data?.items.length ? (
           <div className="text-[14px] text-textItemBlur py-[24px] text-center">
-            {search || tag || kinds.length || activeChannels.length || hideUnnamed ? t('inbox_nothing_matches', 'Nothing matches these filters.') : t('inbox_empty', 'Nothing here yet. New mentions show up within about 10 minutes.')}
+            {search || tag || kinds.length || activeChannels.length || hideUnnamed || toUsOnly ? t('inbox_nothing_matches', 'Nothing matches these filters.') : t('inbox_empty', 'Nothing here yet. New mentions show up within about 10 minutes.')}
           </div>
         ) : (
           <>
