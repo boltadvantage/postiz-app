@@ -82,7 +82,7 @@ export class LoadToolsService {
         - List integrations (channels)
         - Give the user a link to connect a new channel (integrationConnectTool)
         - List groups (customers) and filter the channels by a group
-        - Read the inbox (mentions, replies, quotes on Nostr and X) and reply, repost, quote or like (boltInboxListTool, boltInboxRespondTool)
+        - Read the inbox (mentions, replies, quotes on Nostr and X) and reply, repost, quote or like (boltInboxListTool, boltInboxRespondTool); hide, delete or ban on Facebook/Instagram comments (boltInboxModerateTool)
         - Read and answer direct messages (boltConversationsListTool, boltConversationReadTool, boltMessageSendTool)
         - Tag, note or mute people in the inbox privately (boltPeopleTool)
         - See and change each channel's posting queue, and pause or resume all posting (boltQueueTool, boltQueueUpdateTool, boltPostingPauseTool)
