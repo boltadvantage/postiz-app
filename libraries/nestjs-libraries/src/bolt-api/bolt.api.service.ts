@@ -2,7 +2,7 @@
 // people, queue, pause, saved analytics) for outside callers — the MCP tools
 // AI agents use and the API-key public API — so both always match. Also client costs.
 import { Injectable } from '@nestjs/common';
-import { INBOX_ACTIONS, InboxService } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
+import { INBOX_ACTIONS, InboxService, MODERATE_ACTIONS } from '@gitroom/nestjs-libraries/bolt-inbox/inbox.service';
 import { DmService } from '@gitroom/nestjs-libraries/bolt-inbox/dm.service';
 import { FollowsService } from '@gitroom/nestjs-libraries/bolt-inbox/follows.service';
 import { CompetitorsService } from '@gitroom/nestjs-libraries/bolt-competitors/competitors.service';
@@ -125,8 +125,15 @@ export class BoltApiService {
   }
 
   respond(orgId: string, itemId: string, action: string, text?: string) {
-    if (!(INBOX_ACTIONS as readonly string[]).includes(action)) throw new Error('action must be reply, repost, quote or like');
+    if ((MODERATE_ACTIONS as readonly string[]).includes(action)) return this.moderate(orgId, itemId, action);
+    if (!(INBOX_ACTIONS as readonly string[]).includes(action)) throw new Error('action must be reply, repost, quote, like, hide, delete or ban');
     return this._inbox.act(orgId, itemId, action as any, text);
+  }
+
+  /** Hide or delete a Facebook/Instagram comment on our post, or ban its author from the Facebook Page. Same as the inbox buttons. */
+  moderate(orgId: string, itemId: string, action: string) {
+    if (!(MODERATE_ACTIONS as readonly string[]).includes(action)) throw new Error('action must be hide, delete or ban');
+    return this._inbox.moderate(orgId, itemId, action as any);
   }
 
   /** Mark, archive or delete everything the inbox filters match, every page at once. */

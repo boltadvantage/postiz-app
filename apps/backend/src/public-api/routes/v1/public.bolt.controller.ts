@@ -64,6 +64,7 @@ export class PublicBoltController {
     return wrap(() => this._api.markInbox(org.id, ids(body), body.action!));
   }
 
+  /** action: reply, repost, quote or like (body { text } for reply and quote); hide, delete or ban for Facebook/Instagram comments. */
   @Post('/inbox/:id/:action')
   respond(@GetOrgFromRequest() org: Organization, @Param('id') id: string, @Param('action') action: string, @Body() body: { text?: string }) {
     return wrap(() => this._api.respond(org.id, id, action, body?.text));

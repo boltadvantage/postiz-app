@@ -173,7 +173,7 @@ export class BoltInboxRespondTool implements AgentToolInterface {
       mcp: write('Reply / Repost / Quote / Like an Inbox Item', true),
       description: `
 Publicly reply to, repost, quote or like an inbox item (from boltInboxListTool) from the channel it arrived on. This posts on the social network right away and cannot be undone from here.
-"reply" and "quote" need "text" (X: 280 characters, or 25,000 for X Premium channels). "repost" and "like" take no text. Facebook comments can only be replied to or liked; Instagram comments can only be replied to, and Instagram tags not at all.
+"reply" and "quote" need "text" (X: 280 characters, or 25,000 for X Premium channels). "repost" and "like" take no text. Facebook comments can only be replied to or liked; Instagram comments can only be replied to, and Instagram tags not at all. To hide, delete or ban, use boltInboxModerateTool.
 Always show the user the exact text and which item it answers, and get their confirmation before calling this.
 `,
       inputSchema: z.object({
@@ -183,6 +183,33 @@ Always show the user the exact text and which item it answers, and get their con
       }),
       outputSchema,
       execute: async (input, context) => run(() => this._api.respond(orgId(input, context), input.itemId, input.action, input.text)),
+    });
+  }
+}
+
+@Injectable()
+export class BoltInboxModerateTool implements AgentToolInterface {
+  constructor(private _api: BoltApiService) {}
+  name = 'boltInboxModerateTool';
+  optionalOnSelfHosted = true;
+  run() {
+    return createTool({
+      id: 'boltInboxModerateTool',
+      mcp: write('Hide / Delete / Ban on a Facebook or Instagram Comment', true),
+      description: `
+Moderate a comment someone left on one of our Facebook or Instagram posts (an inbox item from boltInboxListTool), the same as the Hide, Delete and Ban buttons in the inbox.
+"hide": hides the comment on the network (the author and their friends still see it, nobody else does) and archives it here. Can be undone on Facebook/Instagram.
+"delete": deletes the comment on the network and removes it from the inbox. Cannot be undone.
+"ban": Facebook Pages only. Bans the author from the Page, hides this comment, mutes them and archives all their comments here.
+Works on Facebook comments and Instagram comments, not X, Nostr or Instagram tags. Flagged comments (alertWords) are the usual candidates.
+Show the user which comments and which action, and get their confirmation before calling this.
+`,
+      inputSchema: z.object({
+        itemId: z.string().describe('Inbox item id'),
+        action: z.enum(['hide', 'delete', 'ban']),
+      }),
+      outputSchema,
+      execute: async (input, context) => run(() => this._api.moderate(orgId(input, context), input.itemId, input.action)),
     });
   }
 }
@@ -582,6 +609,7 @@ Sizes: "square" 1080x1080, "portrait" 1080x1350, "story" 1080x1920, "landscape" 
 export const boltTools = [
   BoltInboxListTool,
   BoltInboxRespondTool,
+  BoltInboxModerateTool,
   BoltInboxMarkTool,
   BoltInboxMarkMatchingTool,
   BoltFollowsListTool,
